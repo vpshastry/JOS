@@ -331,7 +331,7 @@ mem_init_mp(void)
 	// to as its kernel stack. CPU i's kernel stack grows down from virtual
 	// address kstacktop_i = KSTACKTOP - i * (KSTKSIZE + KSTKGAP), and is
 	// divided into two pieces, just like the single stack you set up in
-	// mem_init:
+	// x86_vm_init:
 	//     * [kstacktop_i - KSTKSIZE, kstacktop_i)
 	//          -- backed by physical memory
 	//     * [kstacktop_i - (KSTKSIZE + KSTKGAP), kstacktop_i - KSTKSIZE)
