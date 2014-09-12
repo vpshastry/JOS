@@ -12,14 +12,15 @@
 #include <kern/env.h>
 #include <kern/cpu.h>
 
-#define BOOT_PAGE_TABLE_START 0xf0008000
-#define BOOT_PAGE_TABLE_END   0xf000e000
+extern uint64_t pml4phys;
+#define BOOT_PAGE_TABLE_START ((uint64_t) KADDR(pml4phys))
+#define BOOT_PAGE_TABLE_END   ((uint64_t) KADDR((pml4phys) + 5*PGSIZE))
 
 // These variables are set by i386_detect_memory()
 size_t npages;			// Amount of physical memory (in pages)
 static size_t npages_basemem;	// Amount of base memory (in pages)
 
-// These variables are set in mem_init()
+// These variables are set in x86_vm_init()
 pml4e_t *boot_pml4e;		// Kernel's initial page directory
 physaddr_t boot_cr3;		// Physical address of boot time page directory
 struct PageInfo *pages;		// Physical page state array
@@ -116,38 +117,38 @@ i386_detect_memory(void)
 {
 	size_t npages_extmem;
 	size_t basemem = 0;
-    size_t extmem = 0;
+	size_t extmem = 0;
 
-    // Check if the bootloader passed us a multiboot structure
-    extern char multiboot_info[];
-    uintptr_t* mbp = (uintptr_t*)multiboot_info;
-    multiboot_info_t * mbinfo = (multiboot_info_t*)*mbp;
-
-    if(mbinfo && (mbinfo->flags & MB_FLAG_MMAP)) {
-    	multiboot_read(mbinfo, &basemem, &extmem);
+	// Check if the bootloader passed us a multiboot structure
+	extern char multiboot_info[];
+	uintptr_t* mbp = (uintptr_t*)multiboot_info;
+	multiboot_info_t * mbinfo = (multiboot_info_t*)*mbp;
+	
+	if(mbinfo && (mbinfo->flags & MB_FLAG_MMAP)) {
+		multiboot_read(mbinfo, &basemem, &extmem);
 	} else {
 		basemem = (nvram_read(NVRAM_BASELO) * 1024);
 		extmem = (nvram_read(NVRAM_EXTLO) * 1024);
 	}
     
-    assert(basemem);
+	assert(basemem);
 
 	npages_basemem = basemem / PGSIZE;
 	npages_extmem = extmem / PGSIZE;
+	
+	// Calculate the number of physical pages available in both base
+	// and extended memory.
+	if (npages_extmem)
+		npages = (EXTPHYSMEM / PGSIZE) + npages_extmem;
+	else
+		npages = npages_basemem;
 
-    // Calculate the number of physical pages available in both base
-    // and extended memory.
-    if (npages_extmem)
-            npages = (EXTPHYSMEM / PGSIZE) + npages_extmem;
-    else
-            npages = npages_basemem;
-
-    if(nvram_read(NVRAM_EXTLO) == 0xffff) {
-        // EXTMEM > 16M in blocks of 64k
-        size_t pextmem = nvram_read(NVRAM_EXTGT16LO) * (64 * 1024);
-        npages_extmem = ((16 * 1024 * 1024) + pextmem - (1 * 1024 * 1024)) / PGSIZE;
-    }
-
+	if(nvram_read(NVRAM_EXTLO) == 0xffff) {
+		// EXTMEM > 16M in blocks of 64k
+		size_t pextmem = nvram_read(NVRAM_EXTGT16LO) * (64 * 1024);
+		npages_extmem = ((16 * 1024 * 1024) + pextmem - (1 * 1024 * 1024)) / PGSIZE;
+	}
+	
 	// Calculate the number of physical pages available in both base
 	// and extended memory.
 	if (npages_extmem)
@@ -158,14 +159,14 @@ i386_detect_memory(void)
 	cprintf("Physical memory: %uM available, base = %uK, extended = %uK, npages = %d\n",
 		npages * PGSIZE / (1024 * 1024),
 		npages_basemem * PGSIZE / 1024,
-		npages_extmem * PGSIZE / 1024);
-    
-    //JOS is hardwired to support only 256M of physical memory
-    if(npages > ((255 * 1024 * 1024)/PGSIZE)) {
-        npages = (255 * 1024 * 1024) / PGSIZE;
-        cprintf("Using only %uK of the available memory.\n", npages * PGSIZE/1024);
-    }
-
+		npages_extmem * PGSIZE / 1024,
+		npages);
+	
+	//JOS is hardwired to support only 256M of physical memory
+	if(npages > ((255 * 1024 * 1024)/PGSIZE)) {
+		npages = (255 * 1024 * 1024) / PGSIZE;
+		cprintf("Using only %uK of the available memory.\n", npages * PGSIZE/1024);
+	}
 }
 
 
@@ -330,7 +331,7 @@ mem_init_mp(void)
 	// to as its kernel stack. CPU i's kernel stack grows down from virtual
 	// address kstacktop_i = KSTACKTOP - i * (KSTKSIZE + KSTKGAP), and is
 	// divided into two pieces, just like the single stack you set up in
-	// mem_init:
+	// x86_vm_init:
 	//     * [kstacktop_i - KSTKSIZE, kstacktop_i)
 	//          -- backed by physical memory
 	//     * [kstacktop_i - (KSTKSIZE + KSTKGAP), kstacktop_i - KSTKSIZE)
@@ -832,7 +833,7 @@ check_page_alloc(void)
 
 //
 // Checks that the kernel part of virtual address space
-// has been setup roughly correctly (by mem_init()).
+// has been setup roughly correctly (by x64_vm_init()).
 //
 // This function doesn't test every corner case,
 // but it is a pretty good sanity check.
