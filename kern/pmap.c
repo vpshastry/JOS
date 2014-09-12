@@ -12,8 +12,8 @@
 #include <kern/env.h>
 
 extern uint64_t pml4phys;
-#define BOOT_PAGE_TABLE_START ((uint64_t) KADDR(pml4phys))
-#define BOOT_PAGE_TABLE_END   ((uint64_t) KADDR((pml4phys) + 5*PGSIZE))
+#define BOOT_PAGE_TABLE_START ((uint64_t) KADDR((uint64_t) &pml4phys))
+#define BOOT_PAGE_TABLE_END   ((uint64_t) KADDR((uint64_t) (&pml4phys) + 5*PGSIZE))
 
 // These variables are set by i386_detect_memory()
 size_t npages;			// Amount of physical memory (in pages)
