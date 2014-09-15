@@ -284,7 +284,7 @@ x64_vm_init(void)
 	// Map all of physical memory at KERNBASE. We have detected the number
     // of physical pages to be npages.
 	// Ie.  the VA range [KERNBASE, npages*PGSIZE) should map to
-	//      the PA range [0, npages*PGSIZE - KERNBASE)
+	//      the PA range [0, npages*PGSIZE)
 	// Permissions: kernel RW, user NONE
 	// Your code goes here: 
 	// Check that the initial page directory has been set up correctly.
