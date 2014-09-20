@@ -171,7 +171,7 @@ env_setup_vm(struct Env *e)
 	if (!(p = page_alloc(0)))
 		return -E_NO_MEM;
 
-	// Now, set e->env_pgdir and initialize the page directory.
+	// Now, set e->env_pml4e and initialize the page directory.
 	//
 	// Hint:
 	//    - The VA space of all envs is identical above UTOP
