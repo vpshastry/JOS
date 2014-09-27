@@ -270,6 +270,9 @@ x64_vm_init(void)
 	//////////////////////////////////////////////////////////////////////
 	// Make 'envs' point to an array of size 'NENV' of 'struct Env'.
 	// LAB 3: Your code here.
+	env = boot_alloc (NENV * sizeof (struct Env));
+	memset (pages, 0, NENV * sizeof (struct Env));
+	envs = env;
 	//////////////////////////////////////////////////////////////////////
 	// Now that we've allocated the initial kernel data structures, we set
 	// up the list of free physical pages. Once we've done so, all further
@@ -287,7 +290,7 @@ x64_vm_init(void)
 	//      (ie. perm = PTE_U | PTE_P)
 	//    - pages itself -- kernel RW, user NONE
 	// Your code goes here:
-	boot_map_region(pml4e,UPAGES, sizeof(struct PageInfo) *npages,PADDR(pages),PTE_U|PTE_P);
+	boot_map_region(pml4e,UPAGES, sizeof(struct PageInfo) *npages,PADDR(pages),PTE_U|PTE_P | PTE_W);
 
 	//////////////////////////////////////////////////////////////////////
 	// Map the 'envs' array read-only by the user at linear address UENVS
@@ -296,6 +299,8 @@ x64_vm_init(void)
 	//    - the new image at UENVS  -- kernel R, user R
 	//    - envs itself -- kernel RW, user NONE
 	// LAB 3: Your code here.
+	boot_map_region(pml4e, UENVS, sizeof (struct Env) * NENV, PADDR (env),
+			PTE_P | PTE_U);
 
 	//////////////////////////////////////////////////////////////////////
 	// Use the physical memory that 'bootstack' refers to as the kernel
@@ -324,15 +329,11 @@ x64_vm_init(void)
 	check_boot_pml4e(boot_pml4e);
 	//////////////////////////////////////////////////////////////////////
 	// Permissions: kernel RW, user NONE
-	//pdpe_t *pdpe = KADDR(PTE_ADDR(pml4e[1]));
-	//pde_t *pgdir = KADDR(PTE_ADDR(pdpe[0]));
-	//lcr3(boot_cr3);
+	pdpe_t *pdpe = KADDR(PTE_ADDR(pml4e[1]));
+	pde_t *pgdir = KADDR(PTE_ADDR(pdpe[0]));
+	lcr3(boot_cr3);
 
 	//check_page_free_list(1);
-	//pdpe_t *pdpe = KADDR(PTE_ADDR(pml4e[1]));
-	//pde_t *pgdir = KADDR(PTE_ADDR(pdpe[0]));
-	//lcr3(boot_cr3);
-	check_boot_pml4e(boot_pml4e);
 	check_page_free_list(0);
 }
 
@@ -438,6 +439,7 @@ page_alloc(int alloc_flags)
 
 	result = page_free_list;
 	page_free_list = page_free_list->pp_link;
+	result->pp_link = NULL;
 
 	if (alloc_flags & ALLOC_ZERO)
 		memset (page2kva (result), 0, PGSIZE);
@@ -465,8 +467,10 @@ page_free(struct PageInfo *pp)
 	// Fill this function in
 	// Hint: You may want to panic if pp->pp_ref is nonzero or
 	// pp->pp_link is not NULL.
-	if (!pp)
+	if (pp == NULL || pp->pp_ref != 0|| pp->pp_link != NULL) {
+		panic ("Either pp_ref is nonzero or pp_link non NULL");
 		return;
+	}
 
 	pp->pp_link = page_free_list;
 	page_free_list = pp;
@@ -598,13 +602,10 @@ pgdir_walk(pde_t *pgdir, const void *va, int create)
 		new_page->pp_ref ++;
 
 		*pte_addr = (pde_t) page2pa (new_page);
-		(*pte_addr) |= (PTE_P | PTE_W);
-		if (PDX(va) < PDX(KERNBASE))
-			(*pte_addr) |= PTE_U;
+		(*pte_addr) |= (PTE_P | PTE_W | PTE_U);
 	}
 	pte_ptr = KADDR(PTE_ADDR(*(pgdir+PDX(va))));
-	pte_ptr = &pte_ptr[PTX(va)];
-	return pte_ptr;
+	return &pte_ptr[PTX(va)];
 }
 
 //
@@ -626,6 +627,9 @@ boot_map_region(pml4e_t *pml4e, uintptr_t la, size_t size, physaddr_t pa, int pe
 
 	for(i=0; i < nofpages ; i++, la += PGSIZE, pa += PGSIZE){
 		va = pml4e_walk(pml4e, (void *)la, 1);	
+		if (!va)
+			panic ("Null return from pml4e");
+
 		*va = pa;
 		(*va) |= (perm | PTE_P );
 	}	
@@ -672,13 +676,14 @@ page_insert(pml4e_t *pml4e, struct PageInfo *pp, void *va, int perm)
 			page_remove(pml4e,va);
 
 		pp->pp_ref++;
-		*la = (uint64_t)page2pa(pp);	
-		(*la) |= (perm | PTE_P | PTE_W );
+		*la = page2pa(pp);
+		(*la) |= (perm | PTE_P);
 	}	
 	else{
 		return -E_NO_MEM;
 	}	
 	
+	tlb_invalidate (pml4e, va);
 	return 0;
 }
 
@@ -780,6 +785,30 @@ static uintptr_t user_mem_check_addr;
 user_mem_check(struct Env *env, const void *va, size_t len, int perm)
 {
 	// LAB 3: Your code here.
+	int		nofpages	= (ROUNDUP((uint64_t)va + len, PGSIZE) -
+					   ROUNDDOWN((uint64_t)va, PGSIZE)) / PGSIZE;
+	int		i		= 0;
+	pte_t		*pte		= NULL;
+	uint64_t addr;
+
+	if (!((uint64_t )va < ULIM)) {
+		user_mem_check_addr = (uint64_t) va;
+		return -E_FAULT;
+	}
+
+	for (i = 0; i < nofpages; i ++) {
+		if (i == 0) {
+			addr = (uint64_t)va;
+		} else {
+			addr = ROUNDDOWN((uint64_t)va + i * PGSIZE, PGSIZE);
+		}
+		pte = pml4e_walk (env->env_pml4e, va + (i * PGSIZE), 0);
+		if (!pte || !(*pte & (perm | PTE_P))) {
+			user_mem_check_addr = addr;
+			return -E_FAULT;
+		}
+	}
+
 	return 0;
 
 }
