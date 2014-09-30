@@ -1,4 +1,4 @@
-/* See COPYRIGHT for copyright information. */
+/*See COPYRIGHT for copyright information. */
 
 #include <inc/mmu.h>
 #include <inc/memlayout.h>
@@ -51,7 +51,22 @@
    pusha,popa so you will find these macros handy.
  */
 
-
+TRAPHANDLER_NOEC(traphandler0, T_DIVIDE)
+TRAPHANDLER_NOEC(traphandler1, T_DEBUG)
+TRAPHANDLER_NOEC(traphandler2, T_NMI)
+TRAPHANDLER_NOEC(traphandler3, T_BRKPT)
+TRAPHANDLER_NOEC(traphandler4, T_OFLOW)
+TRAPHANDLER_NOEC(traphandler5, T_BOUND)
+TRAPHANDLER_NOEC(traphandler6, T_ILLOP)
+TRAPHANDLER_NOEC(traphandler7, T_DEVICE)
+TRAPHANDLER(traphandler8, T_DBLFLT)
+TRAPHANDLER_NOEC(traphandler9, 9)
+TRAPHANDLER(traphandler10, T_TSS)
+TRAPHANDLER(traphandler11, T_SEGNP)
+TRAPHANDLER(traphandler12, T_STACK)
+TRAPHANDLER(traphandler13, T_GPFLT)
+TRAPHANDLER(traphandler14, T_PGFLT)
+TRAPHANDLER_NOEC(syscallhandler48, T_SYSCALL)
 
 /*
  * Lab 3: Your code here for _alltraps
@@ -60,3 +75,15 @@
  *       for how to pass a pointer to the trapframe.
  */
 
+_alltraps:
+	subq $16, %rsp;
+	movw %ds, 8(%rsp);
+	movw %es, 0(%rsp);
+	PUSHA;
+	movq $GD_KD, %rax;
+	movq %rax, %ds;
+	movq %rax, %es;
+	movq %rsp, %rdi;
+	call trap;
+	POPA_;
+	iret;
