@@ -91,22 +91,22 @@ trap_init(void)
 	// LAB 3: Your code here.
 
     extern struct Segdesc gdt[];
-    SETGATE(idt[0], 1, GD_KT,traphandler0,3);
-    SETGATE(idt[1], 1, GD_KT,traphandler1,3);
-    SETGATE(idt[2], 1, GD_KT,traphandler2,3);
-    SETGATE(idt[3], 1, GD_KT,traphandler3,3);
-    SETGATE(idt[4], 1, GD_KT,traphandler4,3);
-    SETGATE(idt[5], 1, GD_KT,traphandler5,3);
-    SETGATE(idt[6], 1, GD_KT,traphandler6,3);
-    SETGATE(idt[7], 1, GD_KT,traphandler7,3);
-    SETGATE(idt[8], 1, GD_KT,traphandler8,3);
-    SETGATE(idt[9], 1, GD_KT,traphandler9,3);
-    SETGATE(idt[10], 1, GD_KT,traphandler10,3);
-    SETGATE(idt[11], 1, GD_KT,traphandler11,3);
-    SETGATE(idt[12], 1, GD_KT,traphandler12,3);
-    SETGATE(idt[13], 1, GD_KT,traphandler13,3);
-    SETGATE(idt[14], 1, GD_KT,traphandler14,0);
-    SETGATE(idt[48], 1, GD_KT,syscallhandler48,3);
+    SETGATE(idt[0], 0, GD_KT,traphandler0,0);
+    SETGATE(idt[1], 0, GD_KT,traphandler1,0);
+    SETGATE(idt[2], 0, GD_KT,traphandler2,0);
+    SETGATE(idt[3], 0, GD_KT,traphandler3,3);
+    SETGATE(idt[4], 0, GD_KT,traphandler4,0);
+    SETGATE(idt[5], 0, GD_KT,traphandler5,0);
+    SETGATE(idt[6], 0, GD_KT,traphandler6,0);
+    SETGATE(idt[7], 0, GD_KT,traphandler7,0);
+    SETGATE(idt[8], 0, GD_KT,traphandler8,0);
+    SETGATE(idt[9], 0, GD_KT,traphandler9,0);
+    SETGATE(idt[10], 0, GD_KT,traphandler10,0);
+    SETGATE(idt[11], 0, GD_KT,traphandler11,0);
+    SETGATE(idt[12], 0, GD_KT,traphandler12,0);
+    SETGATE(idt[13], 0, GD_KT,traphandler13,0);
+    SETGATE(idt[14], 0, GD_KT,traphandler14,0);
+    SETGATE(idt[48], 0, GD_KT,syscallhandler48,3);
 
     idt_pd.pd_lim = sizeof(idt)-1;
     idt_pd.pd_base = (uint64_t)idt;
@@ -143,6 +143,19 @@ trap_init_percpu(void)
 
 	// Setup a TSS so that we get the right stack
 	// when we trap to the kernel.
+	int		i = thiscpu->cpu_id;
+
+	thiscpu->cpu_ts.ts_esp0 = KSTACKTOP - (i * (KSTKSIZE + KSTKGAP));
+
+	SETTSS((struct SystemSegdesc64 *) (&gdt[(GD_TSS0 >> 3) + 2 *i]),
+			STS_T64A, (uint64_t) (&(thiscpu->cpu_ts)),
+			sizeof(struct Taskstate), 0);
+
+	ltr(GD_TSS0 + (i * 16));
+
+	lidt(&idt_pd);
+
+	/* OLD code
 	ts.ts_esp0 = KSTACKTOP;
 
 	// Initialize the TSS slot of the gdt.
@@ -153,6 +166,7 @@ trap_init_percpu(void)
 
 	// Load the IDT
 	lidt(&idt_pd);
+	*/
 }
 
 void
@@ -277,6 +291,7 @@ trap(struct Trapframe *tf)
 		// serious kernel work.
 		// LAB 4: Your code here.
 		assert(curenv);
+		lock_kernel ();
 
 		// Garbage collect if current enviroment is a zombie
 		if (curenv->env_status == ENV_DYING) {
