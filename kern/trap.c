@@ -335,9 +335,11 @@ page_fault_handler(struct Trapframe *tf)
 
 	// Handle kernel-mode page faults.
 
+	/* Oh buddy, need not to panic anymore: I handle it.
 	// LAB 3: Your code here.
 	if ((tf->tf_cs & 3) != 3)
 		panic ("Page Fault called from user");
+	*/
 
 	// We've already handled kernel-mode exceptions, so if we get here,
 	// the page fault happened in user mode.
@@ -372,6 +374,9 @@ page_fault_handler(struct Trapframe *tf)
 	//   (the 'tf' variable points at 'curenv->env_tf').
 
 	// LAB 4: Your code here.
+	if (curenv->env_pgfault_upcall) {
+		ret = sys_page_alloc (curenv->env_id, (UXSTACKTOP - PGSIZE),
+					(PTE_U | PTE_W | PTE_P));
 
 	// Destroy the environment that caused the fault.
 	cprintf("[%08x] user fault va %08x ip %08x\n",
