@@ -83,6 +83,23 @@ static const char *trapname(int trapno)
 	void traphandler14();
 	void syscallhandler48();
 
+	void traphandlerIrq0();
+	void traphandlerIrq1();
+	void traphandlerIrq2();
+	void traphandlerIrq3();
+	void traphandlerIrq4();
+	void traphandlerIrq5();
+	void traphandlerIrq6();
+	void traphandlerIrq7();
+	void traphandlerIrq8();
+	void traphandlerIrq9();
+	void traphandlerIrq10();
+	void traphandlerIrq11();
+	void traphandlerIrq12();
+	void traphandlerIrq13();
+	void traphandlerIrq14();
+	void traphandlerIrq15();
+	void traphandlerIrq19();
 
 
 void
@@ -107,6 +124,24 @@ trap_init(void)
     SETGATE(idt[13], 0, GD_KT,traphandler13,0);
     SETGATE(idt[14], 0, GD_KT,traphandler14,0);
     SETGATE(idt[48], 0, GD_KT,syscallhandler48,3);
+
+    SETGATE(idt[32], 0, GD_KT,traphandlerIrq0,0);
+    SETGATE(idt[33], 0, GD_KT,traphandlerIrq1,0);
+    SETGATE(idt[34], 0, GD_KT,traphandlerIrq2,0);
+    SETGATE(idt[35], 0, GD_KT,traphandlerIrq3,0);
+    SETGATE(idt[36], 0, GD_KT,traphandlerIrq4,0);
+    SETGATE(idt[37], 0, GD_KT,traphandlerIrq5,0);
+    SETGATE(idt[38], 0, GD_KT,traphandlerIrq6,0);
+    SETGATE(idt[39], 0, GD_KT,traphandlerIrq7,0);
+    SETGATE(idt[40], 0, GD_KT,traphandlerIrq8,0);
+    SETGATE(idt[41], 0, GD_KT,traphandlerIrq9,0);
+    SETGATE(idt[42], 0, GD_KT,traphandlerIrq10,0);
+    SETGATE(idt[43], 0, GD_KT,traphandlerIrq11,0);
+    SETGATE(idt[44], 0, GD_KT,traphandlerIrq12,0);
+    SETGATE(idt[45], 0, GD_KT,traphandlerIrq13,0);
+    SETGATE(idt[46], 0, GD_KT,traphandlerIrq14,0);
+    SETGATE(idt[47], 0, GD_KT,traphandlerIrq15,0);
+    SETGATE(idt[51], 0, GD_KT,traphandlerIrq19,0);
 
     idt_pd.pd_lim = sizeof(idt)-1;
     idt_pd.pd_base = (uint64_t)idt;
@@ -241,6 +276,13 @@ trap_dispatch(struct Trapframe *tf)
 	} else if (tf->tf_trapno == IRQ_OFFSET + IRQ_SPURIOUS) {
 		cprintf("Spurious interrupt on irq 7\n");
 		print_trapframe(tf);
+		return;
+	}
+	
+	if (tf->tf_trapno == IRQ_OFFSET + IRQ_TIMER) {
+		cprintf("\nTimer interrupt\n");
+		lapic_eoi();
+		sched_yield();
 		return;
 	}
 

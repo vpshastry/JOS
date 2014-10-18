@@ -29,7 +29,7 @@ sched_yield(void)
 	// below to halt the cpu.
 
 	// LAB 4: Your code here.
-	int	i	= (thiscpu->cpu_env)? ENVX (thiscpu->cpu_env->env_id): 0;
+	int	i	= (thiscpu->cpu_env)? ENVX (thiscpu->cpu_env->env_id)+1: 0;
 	int	count	= 0;
 
 	for (count = 0; count < (NENV - 1); count++, (i = (i + 1) % NENV))
