@@ -66,13 +66,48 @@ static const char *trapname(int trapno)
 	return "(unknown trap)";
 }
 
+	void traphandler0();
+	void traphandler1();
+	void traphandler2();
+	void traphandler3();
+	void traphandler4();
+	void traphandler5();
+	void traphandler6();
+	void traphandler7();
+	void traphandler8();
+	void traphandler9();
+	void traphandler10();
+	void traphandler11();
+	void traphandler12();
+	void traphandler13();
+	void traphandler14();
+	void syscallhandler48();
+
+
 
 void
 trap_init(void)
 {
-	extern struct Segdesc gdt[];
-
 	// LAB 3: Your code here.
+
+    extern struct Segdesc gdt[];
+    SETGATE(idt[0], 1, GD_KT,traphandler0,3);
+    SETGATE(idt[1], 1, GD_KT,traphandler1,3);
+    SETGATE(idt[2], 1, GD_KT,traphandler2,3);
+    SETGATE(idt[3], 1, GD_KT,traphandler3,3);
+    SETGATE(idt[4], 1, GD_KT,traphandler4,3);
+    SETGATE(idt[5], 1, GD_KT,traphandler5,3);
+    SETGATE(idt[6], 1, GD_KT,traphandler6,3);
+    SETGATE(idt[7], 1, GD_KT,traphandler7,3);
+    SETGATE(idt[8], 1, GD_KT,traphandler8,3);
+    SETGATE(idt[9], 1, GD_KT,traphandler9,3);
+    SETGATE(idt[10], 1, GD_KT,traphandler10,3);
+    SETGATE(idt[11], 1, GD_KT,traphandler11,3);
+    SETGATE(idt[12], 1, GD_KT,traphandler12,3);
+    SETGATE(idt[13], 1, GD_KT,traphandler13,3);
+    SETGATE(idt[14], 1, GD_KT,traphandler14,0);
+    SETGATE(idt[48], 1, GD_KT,syscallhandler48,3);
+
     idt_pd.pd_lim = sizeof(idt)-1;
     idt_pd.pd_base = (uint64_t)idt;
 	// Per-CPU setup
@@ -178,11 +213,18 @@ trap_dispatch(struct Trapframe *tf)
 {
 	// Handle processor exceptions.
 	// LAB 3: Your code here.
+	if(tf->tf_trapno == T_SYSCALL){
+		tf->tf_regs.reg_rax = syscall(tf->tf_regs.reg_rax, tf->tf_regs.reg_rdx, tf->tf_regs.reg_rcx,tf->tf_regs.reg_rbx,tf->tf_regs.reg_rdi,tf->tf_regs.reg_rsi);
+		return;
+
+	} else if (tf->tf_trapno == T_PGFLT){
+		page_fault_handler(tf);
+		return;
 
 	// Handle spurious interrupts
 	// The hardware sometimes raises these because of noise on the
 	// IRQ line or other reasons. We don't care.
-	if (tf->tf_trapno == IRQ_OFFSET + IRQ_SPURIOUS) {
+	} else if (tf->tf_trapno == IRQ_OFFSET + IRQ_SPURIOUS) {
 		cprintf("Spurious interrupt on irq 7\n");
 		print_trapframe(tf);
 		return;
@@ -192,6 +234,10 @@ trap_dispatch(struct Trapframe *tf)
 	// interrupt using lapic_eoi() before calling the scheduler!
 	// LAB 4: Your code here.
 
+	else if (tf->tf_trapno == T_BRKPT) {
+		monitor (tf);
+		return;
+	}
 	// Handle keyboard and serial interrupts.
 	// LAB 5: Your code here.
 
@@ -277,6 +323,8 @@ page_fault_handler(struct Trapframe *tf)
 	// Handle kernel-mode page faults.
 
 	// LAB 3: Your code here.
+	if ((tf->tf_cs & 3) != 3)
+		panic ("Page Fault called from user");
 
 	// We've already handled kernel-mode exceptions, so if we get here,
 	// the page fault happened in user mode.

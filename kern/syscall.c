@@ -20,6 +20,7 @@ sys_cputs(const char *s, size_t len)
 {
 	// Check that the user has permission to read memory [s, s+len).
 	// Destroy the environment if not.
+	user_mem_assert (curenv, s, len, PTE_U);
 
 	// LAB 3: Your code here.
 
@@ -286,11 +287,23 @@ syscall(uint64_t syscallno, uint64_t a1, uint64_t a2, uint64_t a3, uint64_t a4, 
 	// Return any appropriate return value.
 	// LAB 3: Your code here.
 
-	panic("syscall not implemented");
-
+	//panic("syscall not implemented");
 	switch (syscallno) {
+	case SYS_cputs:
+		sys_cputs ((char *)a1, (size_t) a2);
+		return 0;
+
+	case SYS_cgetc:
+		return sys_cgetc ();
+
+	case SYS_env_destroy:
+		return sys_env_destroy ((envid_t) a1);
+
+	case SYS_getenvid:
+		return sys_getenvid ();
+
 	default:
-		return -E_NO_SYS;
+		return -E_INVAL;
 	}
 }
 

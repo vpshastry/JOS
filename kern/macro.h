@@ -1,5 +1,5 @@
 #define PUSHA        \
-    subq $120,%rsp  ; \
+    subq $120, %rsp;  \
     movq %rax,112(%rsp); \
     movq %rbx,104(%rsp); \
     movq %rcx,96(%rsp); \
