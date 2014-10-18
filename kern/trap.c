@@ -374,9 +374,53 @@ page_fault_handler(struct Trapframe *tf)
 	//   (the 'tf' variable points at 'curenv->env_tf').
 
 	// LAB 4: Your code here.
-	if (curenv->env_pgfault_upcall) {
-		ret = sys_page_alloc (curenv->env_id, (UXSTACKTOP - PGSIZE),
-					(PTE_U | PTE_W | PTE_P));
+	if (curenv->env_pgfault_upcall){
+		uint64_t rsp_val = tf->tf_rsp;	
+		uint64_t trap_rsp = tf->tf_rsp;	
+
+		if (tf->tf_rsp >= UXSTACKTOP-PGSIZE && tf->tf_rsp < UXSTACKTOP){
+			//empty 64 bit space
+                        tf->tf_rsp = tf->tf_rsp - sizeof(struct UTrapframe) - 8;
+			trap_rsp= tf->tf_rsp; 
+
+		} else {
+			tf->tf_rsp = UXSTACKTOP - sizeof(struct UTrapframe);
+			trap_rsp=tf->tf_rsp;
+		}
+
+		
+
+		user_mem_assert(curenv, (void *) trap_rsp,
+				sizeof(struct UTrapframe) ,PTE_U|PTE_W);
+		user_mem_assert(curenv, (void *) (UXSTACKTOP-PGSIZE),
+				PGSIZE,PTE_U|PTE_W);
+		
+		if(tf->tf_rsp > UXSTACKTOP || tf->tf_rsp < UXSTACKTOP-PGSIZE){
+			cprintf("Unable to handle user exception, Out of Memory\n");
+			cprintf("[%08x] user fault va %08x ip %08x\n",                          
+			curenv->env_id, fault_va, tf->tf_rip);
+			print_trapframe(tf);
+			env_destroy(curenv);         
+			return;
+		}
+
+		//syscall(SYS_page_alloc, curenv->env_id, (uintptr_t) (UXSTACKTOP-PGSIZE), PTE_U,0,0);	
+
+		struct UTrapframe *utf = (struct UTrapframe *)trap_rsp;
+		
+		utf->utf_regs = tf->tf_regs;
+		utf->utf_eflags = tf->tf_eflags;
+		utf->utf_rip = tf->tf_rip;
+		utf->utf_rsp = rsp_val;
+		utf->utf_err = tf->tf_err;
+		utf->utf_fault_va = fault_va;
+		
+		// Run current env with user-page fault handler.
+		curenv->env_tf.tf_rip = (uintptr_t)curenv->env_pgfault_upcall;
+		curenv->env_tf.tf_rsp = trap_rsp;
+		env_run(curenv);
+		return;
+	}
 
 	// Destroy the environment that caused the fault.
 	cprintf("[%08x] user fault va %08x ip %08x\n",

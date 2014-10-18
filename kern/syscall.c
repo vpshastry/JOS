@@ -20,7 +20,7 @@ sys_cputs(const char *s, size_t len)
 {
 	// Check that the user has permission to read memory [s, s+len).
 	// Destroy the environment if not.
-	user_mem_assert (curenv, s, len, PTE_U);
+	user_mem_assert (curenv, s, len-1, PTE_U);
 
 	// LAB 3: Your code here.
 
@@ -219,7 +219,7 @@ sys_page_alloc(envid_t envid, void *va, int perm)
 	if ((perm & ~((int)PTE_SYSCALL)) ||
 		// Doesn't perm contain PTE_U and PTE_P bits?
 			!((perm & PTE_U) && (perm & PTE_P))) {
-		cprintf ("\n\n\nInvalid permission\n\n\n");
+		cprintf ("\n\n\npageAlloc: Invalid permission\n\n\n");
 		return -E_INVAL;
 	}
 
@@ -286,7 +286,7 @@ sys_page_map(envid_t srcenvid, void *srcva,
 	if ((perm & ~((int)PTE_SYSCALL)) ||
 		// Doesn't perm contain PTE_U and PTE_P bits?
 			!((perm & PTE_U) && (perm & PTE_P))) {
-		cprintf ("\n\n\n Invalid permission\n\n\n");
+		cprintf ("\n\n\nPageMap: Invalid permission\n\n\n");
 		return -E_INVAL;
 	}
 
