@@ -38,12 +38,18 @@ sched_yield(void)
 			return;
 		}
 
-	for (i = 0; i < NENV; i++)
+	if (thiscpu->cpu_env)
+		if (thiscpu->cpu_env->env_status == ENV_RUNNING) {
+			env_run (thiscpu->cpu_env);
+			return;
+		}
+	/*for (i = 0; i < NENV; i++)
 		if (envs[i].env_status == ENV_RUNNING &&
 				envs[i].env_cpunum == thiscpu->cpu_id) {
 			env_run (&envs[i]);
 			return;
 		}
+		*/
 
 
 	// sched_halt never returns

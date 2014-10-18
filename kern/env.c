@@ -227,7 +227,6 @@ env_alloc(struct Env **newenv_store, envid_t parent_id)
 	struct Env *e;
 
 	if (!(e = env_free_list)) {
-		cprintf ("\n\n\nwrong here\n\n\n");
 		return -E_NO_FREE_ENV;
 	}
 
@@ -586,11 +585,15 @@ env_run(struct Env *e)
 	// LAB 3: Your code here.
 
 	// If context switch handle the old one
-	if (curenv && curenv->env_id != e->env_id)
+
+	if (curenv && curenv->env_id != e->env_id) {
 		if (curenv->env_status == ENV_RUNNING)
 			curenv->env_status = ENV_RUNNABLE;
+	}
 
+	struct Env *old_e = curenv;
 	curenv = e;
+
 	e->env_status = ENV_RUNNING;
 	e->env_runs ++;
 	lcr3 (PADDR (e->env_pml4e));
