@@ -226,8 +226,9 @@ env_alloc(struct Env **newenv_store, envid_t parent_id)
 	int r;
 	struct Env *e;
 
-	if (!(e = env_free_list))
+	if (!(e = env_free_list)) {
 		return -E_NO_FREE_ENV;
+	}
 
 	// Allocate and set up the page directory for this environment.
 	if ((r = env_setup_vm(e)) < 0)
@@ -268,6 +269,7 @@ env_alloc(struct Env **newenv_store, envid_t parent_id)
 
 	// Enable interrupts while in user mode.
 	// LAB 4: Your code here.
+	e->env_tf.tf_eflags = e->env_tf.tf_eflags | 0x00000200;
 
 	// Clear the page fault handler until user installs one.
 	e->env_pgfault_upcall = 0;
@@ -587,14 +589,19 @@ env_run(struct Env *e)
 	// LAB 3: Your code here.
 
 	// If context switch handle the old one
-	if (curenv && curenv->env_id != e->env_id)
+
+	if (curenv && curenv->env_id != e->env_id) {
 		if (curenv->env_status == ENV_RUNNING)
 			curenv->env_status = ENV_RUNNABLE;
+	}
 
+	struct Env *old_e = curenv;
 	curenv = e;
+
 	e->env_status = ENV_RUNNING;
 	e->env_runs ++;
 	lcr3 (PADDR (e->env_pml4e));
+	unlock_kernel ();
 	env_pop_tf(&e->env_tf);
 
 	//panic("env_run not yet implemented");

@@ -273,7 +273,7 @@ x64_vm_init(void)
 	// Make 'envs' point to an array of size 'NENV' of 'struct Env'.
 	// LAB 3: Your code here.
 	env = boot_alloc (NENV * sizeof (struct Env));
-	memset (pages, 0, NENV * sizeof (struct Env));
+	memset (env, 0, NENV * sizeof (struct Env));
 	envs = env;
 	//////////////////////////////////////////////////////////////////////
 	// Now that we've allocated the initial kernel data structures, we set
@@ -350,7 +350,8 @@ check_for_reserved_spaces(struct PageInfo *trav)
 	    ((int *)page2kva(trav) >= (int *)BOOT_PAGE_TABLE_START &&
 	     (int *)page2kva(trav) < (int *)BOOT_PAGE_TABLE_END) ||
 	    (trav >= &pages[npages_basemem] &&
-	     trav < &pages[npages_basemem + 96])
+	     trav < &pages[npages_basemem + 96]) ||
+	    ((int *)trav == (int *)MPENTRY_PADDR)
 	   )
 		return 1;
 
@@ -379,7 +380,15 @@ mem_init_mp(void)
 	//     Permissions: kernel RW, user NONE
 	//
 	// LAB 4: Your code here:
+	uintptr_t	kstacktop_i	= 0;
+	int		i		= 0;
 
+	for (i = 0; i < NCPU; i++) {
+		kstacktop_i = KSTACKTOP - (i * (KSTKSIZE + KSTKGAP));
+		boot_map_region (boot_pml4e, (kstacktop_i - KSTKSIZE),
+					KSTKSIZE, PADDR (percpu_kstacks[i]),
+					PTE_W | PTE_P);
+	}
 }
 
 // --------------------------------------------------------------
@@ -828,7 +837,19 @@ mmio_map_region(physaddr_t pa, size_t size)
 	// Hint: The staff solution uses boot_map_region.
 	//
 	// Your code here:
-	panic("mmio_map_region not implemented");
+	//panic("mmio_map_region not implemented");
+	uintptr_t	rbase	= 0;
+
+	size = ROUNDUP (size, PGSIZE);
+
+	boot_map_region (boot_pml4e, base, size, pa,
+				PTE_PCD | PTE_PWT | PTE_W | PTE_P);
+
+	rbase = base;
+
+	base += size;
+
+	return (void *)rbase;
 }
 
 static uintptr_t user_mem_check_addr;
