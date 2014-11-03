@@ -66,7 +66,30 @@ static int
 file_block_walk(struct File *f, uint32_t filebno, uint32_t **ppdiskbno, bool alloc)
 {
         // LAB 5: Your code here.
-        panic("file_block_walk not implemented");
+        //panic("file_block_walk not implemented");
+	uint32_t	*ib_addr	= NULL;
+
+	if (filebno >= (NDIRECT + NINDIRECT))
+		return -E_INVAL;
+
+	if (filebno < NDIRECT) {
+		*ppdiskbno = &f->f_direct[filebno];
+		return 0;
+	}
+
+	if (!f->f_indirect) {
+		if (!alloc)
+			return -E_NOT_FOUND;
+
+		panic ("Can't allocate in a read-only FS");
+		return -E_INVAL;
+	}
+
+	ib_addr = (uint32_t *) diskaddr ((uint64_t)f->f_indirect);
+
+	*ppdiskbno = (uint32_t *)&(ib_addr[filebno - NDIRECT]);
+
+	return 0;
 }
 
 // Set *blk to the address in memory where the filebno'th
@@ -80,7 +103,23 @@ int
 file_get_block(struct File *f, uint32_t filebno, char **blk)
 {
 	// LAB 5: Your code here.
-	panic("file_block_walk not implemented");
+	//panic("file_block_walk not implemented");
+	int		ret		= 0;
+	uint32_t	*ppdiskbno	= NULL;
+
+	if (filebno > (NDIRECT + NINDIRECT)) {
+		cprintf ("\n\n\n filebno is out of range\n\n\n");
+		return -E_INVAL;
+	}
+
+	ret = file_block_walk (f, filebno, &ppdiskbno, 0);
+	if (ret < 0) {
+		cprintf ("\n\n\n file block walk failed\n\n\n");
+		return -E_INVAL;
+	}
+
+	*blk = (char *) diskaddr ((uint64_t)*ppdiskbno);
+	return 0;
 }
 
 // Try to find a file named "name" in dir.  If so, set *file to it.
