@@ -74,24 +74,40 @@ duppage(envid_t envid, unsigned pn)
 {
 	int r;
 	int	ret	= 0;
-	uint64_t	perm	= PTE_P | PTE_U;
+	uint64_t	perm	= uvpt[pn] & PTE_SYSCALL;
 
-	if ((uvpt[pn] & (uint64_t)PTE_W) || (uvpt[pn] & (int64_t)PTE_COW))
-		perm |= (PTE_COW);
+	if (uvpt[pn] & PTE_SHARE) {
+		ret = sys_page_map (0, (void *)(uintptr_t)(pn * PGSIZE), envid,
+					(void *)(uintptr_t)(pn * PGSIZE),
+					perm | PTE_SHARE);
+		if (ret < 0) {
+			cprintf ("\n\n\nFailed sys page map @duppage\n\n\n");
+			return ret;
+		}
 
-	// LAB 4: Your code here.
-	//panic("duppage not implemented");
-	// Make sure about the source and destination envids
-	ret = sys_page_map (0, (void *)(uintptr_t)(pn * PGSIZE), envid,
-				(void *)(uintptr_t)(pn * PGSIZE), perm);
-	if (ret < 0)
-		panic ("page mapping for child failed");
+	} else if ((uvpt[pn] & PTE_W) || (uvpt[pn] & PTE_COW)) {
+		// LAB 4: Your code here.
+		//panic("duppage not implemented");
+		// Make sure about the source and destination envids
+		ret = sys_page_map (0, (void *)(uintptr_t)(pn * PGSIZE), envid,
+					(void *)(uintptr_t)(pn * PGSIZE),
+					PTE_P | PTE_U | PTE_COW);
+		if (ret < 0)
+			panic ("page mapping for child failed");
 
-	// Set its own to page mapping to COW
-	ret = sys_page_map (0, (void *)(uintptr_t)(pn * PGSIZE), 0,
-				(void *)(uintptr_t)(pn * PGSIZE), perm);
-	if (ret < 0)
-		panic ("page mapping for itself is failed");
+		// Set its own to page mapping to COW
+		ret = sys_page_map (0, (void *)(uintptr_t)(pn * PGSIZE), 0,
+					(void *)(uintptr_t)(pn * PGSIZE),
+					PTE_P | PTE_U | PTE_COW);
+		if (ret < 0)
+			panic ("page mapping for itself is failed");
+	} else if (uvpt[pn] & PTE_P) {
+		ret = sys_page_map (0, (void *)(uintptr_t)(pn * PGSIZE), envid,
+					(void *)(uintptr_t)(pn * PGSIZE),
+					PTE_P | PTE_U);
+		if (ret < 0)
+			panic ("page mapping for child failed");
+	}
 
 	return 0;
 }
@@ -122,6 +138,7 @@ fork(void)
 	unsigned	pn		= 0;
 	uint8_t		*i		= 0;
 	int		ret		= 0;
+	uintptr_t	va		= 0;
 	extern unsigned char end[];
 	const volatile struct Env	*myenv		= NULL;
 
@@ -142,11 +159,14 @@ fork(void)
 	// Parent process
 	myenv = &envs[ENVX(sys_getenvid ())];
 
-	for (i = (uint8_t *)UTEXT; i < end; i += PGSIZE) {
+	for (i = (uint8_t *)UTEXT; i < (uint8_t*)(USTACKTOP-PGSIZE); i += PGSIZE) {
 		pn = PGNUM (i);
+		va = pn * PGSIZE;
 
-		if (!((uvpt [pn]) & PTE_P) ||
-				i == (uint8_t *)(UXSTACKTOP - PGSIZE))
+		if (!((uvpml4e[VPML4E(va)] & (uint64_t)PTE_P) &&
+			(uvpde[VPDPE(va)] & (uint64_t)PTE_P) &&
+			(uvpd[VPD(va)] & (uint64_t)PTE_P) &&
+			(uvpt [pn] & (uint64_t)PTE_P)))
 			continue;
 
 		ret = duppage (childenvid, pn);
