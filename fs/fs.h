@@ -13,6 +13,7 @@
 
 struct Super *super;		// superblock
 uint32_t *bitmap;		// bitmap blocks mapped in memory
+char *diskpos;
 
 /* ide.c */
 bool	ide_probe_disk1(void);

@@ -19,6 +19,13 @@ check_super(void)
 	cprintf("superblock is good\n");
 }
 
+void
+bitmap_init (void)
+{
+	nbitblocks = (nblocks + BLKBITSIZE - 1) / BLKBITSIZE;
+	bitmap = alloc (nbitblocks * BLKSIZE);
+	memset(bitmap, 0xFF, nbitblocks * BLKSIZE);
+}
 
 // --------------------------------------------------------------
 // File system structures
@@ -41,6 +48,8 @@ fs_init(void)
 	// Set "super" to point to the super block.
 	super = diskaddr(1);
 	check_super();
+
+	bitmap_init ();
 }
 
 // Find the disk block number slot for the 'filebno'th block in file 'f'.
@@ -63,7 +72,8 @@ fs_init(void)
 // Analogy: This is like pgdir_walk for files.
 // Hint: Don't forget to clear any block you allocate.
 static int
-file_block_walk(struct File *f, uint32_t filebno, uint32_t **ppdiskbno, bool alloc)
+file_block_walk(struct File *f, uint32_t filebno, uint32_t **ppdiskbno,
+		bool alloc)
 {
         // LAB 5: Your code here.
         //panic("file_block_walk not implemented");
@@ -81,13 +91,18 @@ file_block_walk(struct File *f, uint32_t filebno, uint32_t **ppdiskbno, bool all
 		if (!alloc)
 			return -E_NOT_FOUND;
 
-		panic ("Can't allocate in a read-only FS");
+		//panic ("Can't allocate in a read-only FS");
+		freeblock = alloc_block ();
 		return -E_INVAL;
 	}
 
 	ib_addr = (uint32_t *) diskaddr ((uint64_t)f->f_indirect);
 
 	*ppdiskbno = (uint32_t *)&(ib_addr[filebno - NDIRECT]);
+
+	// If alloc flag set and the diskblock number is zero, allocate one
+	if (alloc && !**ppdiskbno)
+		**ppdiskbno = alloc_block ();
 
 	return 0;
 }
@@ -258,5 +273,49 @@ file_read(struct File *f, void *buf, size_t count, off_t offset)
 	return count;
 }
 
+int
+file_write(struct File *f, const void *buf, size_t count, off_t offset)
+{
+}
 
+void
+bitmap_clear_flag (uint32_t blockno)
+{
+	bitmap[blockno/32] &= ~(1<<(blockno%32));
+}
 
+bool
+block_is_free (uint32_t blockno)
+{
+	return (bitmap[blockno/32] & (1<<(blockno%32)));
+}
+
+uint32_t
+blockof(void *pos)
+{
+	return ((char*)pos - diskmap) / BLKSIZE;
+}
+
+get_free_block ()
+{
+	for (i = 0; i < nblocks; i ++)
+		if (block_is_free (i))
+			return i;
+
+	return -1;
+}
+
+int
+alloc_block (void)
+{
+	uint32_t freeblock = blockof (diskpos);
+
+	diskpos += BLKSIZE;
+
+	if (blockof (diskpos) >= nblocks)
+		if ((freeblock = get_free_block ()) < 0)
+			panic ("out of memory");
+
+	bitmap_clear_flag (freeblock);
+	return freeblock;
+}
