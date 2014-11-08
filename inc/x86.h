@@ -248,6 +248,9 @@ read_rbp(void)
         return rbp;
 }
 
+
+
+
 static __inline uint64_t
 read_rsp(void)
 {
@@ -255,6 +258,9 @@ read_rsp(void)
         __asm __volatile("movq %%rsp,%0" : "=r" (esp));
         return esp;
 }
+
+#define read_rip(var) __asm __volatile("leaq (%%rip), %0" : "=r" (var)::"cc","memory")
+
 
 static __inline void
 cpuid(uint32_t info, uint32_t *eaxp, uint32_t *ebxp, uint32_t *ecxp, uint32_t *edxp)

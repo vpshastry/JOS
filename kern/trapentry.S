@@ -1,4 +1,4 @@
-/* See COPYRIGHT for copyright information. */
+/*See COPYRIGHT for copyright information. */
 
 #include <inc/mmu.h>
 #include <inc/memlayout.h>
@@ -51,8 +51,40 @@
    pusha,popa so you will find these macros handy.
  */
 
+TRAPHANDLER_NOEC(traphandler0, T_DIVIDE)
+TRAPHANDLER_NOEC(traphandler1, T_DEBUG)
+TRAPHANDLER_NOEC(traphandler2, T_NMI)
+TRAPHANDLER_NOEC(traphandler3, T_BRKPT)
+TRAPHANDLER_NOEC(traphandler4, T_OFLOW)
+TRAPHANDLER_NOEC(traphandler5, T_BOUND)
+TRAPHANDLER_NOEC(traphandler6, T_ILLOP)
+TRAPHANDLER_NOEC(traphandler7, T_DEVICE)
+TRAPHANDLER(traphandler8, T_DBLFLT)
+TRAPHANDLER_NOEC(traphandler9, 9)
+TRAPHANDLER(traphandler10, T_TSS)
+TRAPHANDLER(traphandler11, T_SEGNP)
+TRAPHANDLER(traphandler12, T_STACK)
+TRAPHANDLER(traphandler13, T_GPFLT)
+TRAPHANDLER(traphandler14, T_PGFLT)
+TRAPHANDLER_NOEC(syscallhandler48, T_SYSCALL)
 
-
+TRAPHANDLER_NOEC(traphandlerIrq0, IRQ_TIMER + IRQ_OFFSET)
+TRAPHANDLER_NOEC(traphandlerIrq1, IRQ_KBD + IRQ_OFFSET)
+TRAPHANDLER_NOEC(traphandlerIrq2, 2 + IRQ_OFFSET)
+TRAPHANDLER_NOEC(traphandlerIrq3, 3 + IRQ_OFFSET)
+TRAPHANDLER_NOEC(traphandlerIrq4, IRQ_SERIAL + IRQ_OFFSET)
+TRAPHANDLER_NOEC(traphandlerIrq5, 5 + IRQ_OFFSET)
+TRAPHANDLER_NOEC(traphandlerIrq6, 6 + IRQ_OFFSET)
+TRAPHANDLER_NOEC(traphandlerIrq7, IRQ_SPURIOUS+ IRQ_OFFSET)
+TRAPHANDLER_NOEC(traphandlerIrq8, 8 + IRQ_OFFSET)
+TRAPHANDLER_NOEC(traphandlerIrq9, 9 + IRQ_OFFSET)
+TRAPHANDLER_NOEC(traphandlerIrq10, 10 + IRQ_OFFSET)
+TRAPHANDLER_NOEC(traphandlerIrq11, 11 + IRQ_OFFSET)
+TRAPHANDLER_NOEC(traphandlerIrq12, 12 + IRQ_OFFSET)
+TRAPHANDLER_NOEC(traphandlerIrq13, 13 + IRQ_OFFSET)
+TRAPHANDLER_NOEC(traphandlerIrq14,IRQ_IDE+ IRQ_OFFSET)
+TRAPHANDLER_NOEC(traphandlerIrq15, 15 + IRQ_OFFSET)
+TRAPHANDLER_NOEC(traphandlerIrq19,IRQ_ERROR+ IRQ_OFFSET)
 /*
  * Lab 3: Your code here for _alltraps
  *
@@ -60,3 +92,15 @@
  *       for how to pass a pointer to the trapframe.
  */
 
+_alltraps:
+	subq $16, %rsp;
+	movw %ds, 8(%rsp);
+	movw %es, 0(%rsp);
+	PUSHA;
+	movq $GD_KD, %rax;
+	movq %rax, %ds;
+	movq %rax, %es;
+	movq %rsp, %rdi;
+	call trap;
+	POPA_;
+	iret;
