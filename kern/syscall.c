@@ -305,12 +305,14 @@ sys_page_map(envid_t srcenvid, void *srcva,
 
 	// Check the perm flag as described in the page_alloc syscall
 	// Does perm contain any other bits than PTE_SYSCALL?
+	/*
 	if ((perm & ~((int)PTE_SYSCALL)) ||
 		// Doesn't perm contain PTE_U and PTE_P bits?
 			!((perm & PTE_U) && (perm & PTE_P))) {
 		cprintf ("\n\n\nPageMap: Invalid permission\n\n\n");
 		return -E_INVAL;
 	}
+	*/
 
 	ret = envid2env (srcenvid, &srcenvptr, 1);
 	if (ret < 0) {
