@@ -57,7 +57,8 @@ void bitmap_clear_flag (uint32_t blockno);
 uint32_t blockof(void *pos);
 uint32_t get_free_block (void);
 void bitmap_init (void);
-int skip_to_curdir (char *path, const char *curdirname, char **curptr);
+int skip_to_curdir (char *pathtmp, struct File **pdir, struct File **pf,
+		char **ptr);
 int handle_otrunc (struct File *file);
 int handle_ocreate (char *path, struct File **curdir);
 int get_free_dirent (struct File *dir, struct File **file, char **block);

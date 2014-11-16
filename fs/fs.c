@@ -427,37 +427,62 @@ bitmap_init (void)
 }
 
 int
-skip_to_curdir (char *pathtmp, const char *curdirname, char **curptr)
+skip_to_curdir (char *pathtmp, struct File **pdir, struct File **pf,
+		char **ptr)
 {
-	char *p = NULL;
+	char *p;
 	char name[MAXNAMELEN];
+	struct File *dir, *f;
+	int r;
 	char lpath[MAXPATHLEN];
 	char *path = lpath;
 
 	strcpy (path, pathtmp);
 
+	// if (*path != '/')
+	//	return -E_BAD_PATH;
+	path = my_skip_slash(path);
+	f = &super->s_root;
+	dir = 0;
+	name[0] = 0;
+
+	if (pdir)
+		*pdir = 0;
+	if (pf)
+		*pf = 0;
+
 	while (*path != '\0') {
+		dir = f;
 		p = path;
 		while (*path != '/' && *path != '\0')
-			path ++;
-
-		if ((path - p) >= MAXNAMELEN)
+			path++;
+		if (path - p >= MAXNAMELEN)
 			return -E_BAD_PATH;
+		memmove(name, p, path - p);
+		name[path - p] = '\0';
+		path = my_skip_slash(path);
 
-		memmove ((void *)name, (void *)p, path - p);
-		name [path -p] = '\0';
-		path = my_skip_slash (path);
+		if (dir->f_type != FTYPE_DIR)
+			return -E_NOT_FOUND;
 
-		if (strncmp (name, curdirname, path-p)) {
-			*curptr = pathtmp + (path - lpath);
-			break;
+		if ((r = dir_lookup(dir, name, &f)) < 0) {
+			if (r == -E_NOT_FOUND) {
+				if (pdir)
+					*pdir = dir;
+				if (ptr)
+					*ptr = my_skip_slash (p);
+				if (pf)
+					*pf = 0;
+				r = 0;
+			}
+			return r;
 		}
 	}
 
-	if (*curptr && **curptr)
-		return 0;
-
-	return -E_BAD_PATH;
+	if (pdir)
+		*pdir = dir;
+	*pf = f;
+	return 0;
 }
 
 int
@@ -510,7 +535,7 @@ handle_ocreate (char *path, struct File **curdir)
 	if (path [strlen (path) - 1] == '/')
 		return -E_BAD_PATH;
 
-	r = skip_to_curdir (path, (*curdir)->f_name, &ptr);
+	r = skip_to_curdir (path, &lcurdir, 0, &ptr);
 	if (r < 0) {
 		cprintf ("\nskip to dir failed @handle_ocreate: %e\n", r);
 		return r;
