@@ -515,7 +515,7 @@ bitmap_init (void)
 
 	nbitblocks = (NBLOCKS + BLKBITSIZE - 1) / BLKBITSIZE;
 
-	bitmap = (uint32_t *)(DISKMAP + (PGSIZE *10000));
+	bitmap = (uint32_t *)(DISKMAP + (PGSIZE *2));
 	memset(bitmap, 0xFF, nbitblocks * BLKSIZE);
 
 	// Clear the blocks 0, 1, and bitmap stored blocks
