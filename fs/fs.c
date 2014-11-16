@@ -122,23 +122,21 @@ file_get_block(struct File *f, uint32_t filebno, char **blk)
 	//panic("file_block_walk not implemented");
 	int		ret		= 0;
 	uint32_t	*ppdiskbno	= NULL;
-
-	if (debug)
-		cprintf ("file_get_block filename: %s filebno: %8x\n",
-				f->f_name, filebno);
+	bool		alloc		= (f->f_type == FTYPE_DIR)? 0: 1;
 
 	if (filebno > (NDIRECT + NINDIRECT)) {
 		cprintf ("\n\n\n filebno is out of range\n\n\n");
 		return -E_INVAL;
 	}
 
-	ret = file_block_walk (f, filebno, &ppdiskbno, 1);
+	ret = file_block_walk (f, filebno, &ppdiskbno, alloc);
 	if (ret < 0) {
 		cprintf ("\n\n\n file block walk failed\n\n\n");
 		return -E_INVAL;
 	}
 
 	*blk = (char *) diskaddr ((uint64_t)*ppdiskbno);
+
 	return 0;
 }
 
@@ -297,7 +295,7 @@ file_write(struct File *f, const void *buf, size_t count, off_t offset)
 	uint32_t blockno;
 
 	if (debug)
-		cprintf("file_write %08x %08x %08x\n", buf, count, offset);
+		cprintf("file_write name %s %08x %08x %08x\n", f->f_name, buf, count, offset);
 
 	if (f->f_size == MAXFILESIZE) {
 		cprintf ("File reached its max size\n");
@@ -508,7 +506,7 @@ handle_otrunc (struct File *f)
 	ib_addr = (uint32_t *) diskaddr ((uint64_t)f->f_indirect);
 	for (i = 0; i < NINDIRECT; i++) {
 		if (!ib_addr[i])
-			return 0;
+			break;
 
 		bitmap_set_free (ib_addr[i]);
 		ib_addr[i] = 0;
@@ -560,7 +558,9 @@ handle_ocreate (char *path, struct File **curdir)
 		lcurdir = newfile;
 	}
 
-	*curdir = lcurdir;
+	*curdir = newfile;
+	if (debug)
+		cprintf ("curdir: %s\n", (*curdir)->f_name);
 	return 0;
 }
 

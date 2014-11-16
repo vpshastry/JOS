@@ -13,7 +13,7 @@
 
 // Whiel implementing writeable FS
 uint32_t *bitmap;		// bitmap blocks mapped in memory 1= free, 0 = used
-#define NBLOCKS  (DISKSIZE / BLKSIZE)
+#define NBLOCKS  (super->s_nblocks)
 // <end> writeable FS declaration
 
 struct Super *super;		// superblock
