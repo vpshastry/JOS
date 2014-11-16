@@ -156,7 +156,7 @@ serve_open(envid_t envid, struct Fsreq_open *req,
 		if (debug)
 			cprintf ("Truncating the file: %s\n", f->f_name);
 
-		handle_otrunc (f);
+		handle_otrunc (f, 0);
 	}
 
 	// Save the file pointer
@@ -376,12 +376,12 @@ serve_trunc (envid_t envid, union Fsipc *ipc)
 		return r;
 	}
 
-	if (req->req_n != 0) {
-		cprintf ("We currently don't support non zero trun\n");
+	if (req->req_n % BLKSIZE) {
+		cprintf ("We currently don't support non aligned trunc");
 		return -1;
 	}
 
-	r = handle_otrunc (openfile->o_file);
+	r = handle_otrunc (openfile->o_file, req->req_n);
 	if (r < 0) {
 		cprintf ("\n\n\n failed to trunc file @serve_trunc\n\n\n");
 		return r;

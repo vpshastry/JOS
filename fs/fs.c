@@ -338,7 +338,123 @@ file_write(struct File *f, const void *buf, size_t count, off_t offset)
 	return lcount;
 }
 
+int
+file_set_size(struct File *f, off_t newsize)
+{
+	int r;
+	if (newsize < f->f_size) {
+		r = handle_otrunc (f, newsize);
+		if (r < 0) {
+			cprintf ("truncation to lower size failed\n");
+			return -1;
+		}
+	}
+
+	f->f_size = newsize;
+	return 0;
+}
+
+void
+file_flush (struct File *f)
+{
+	int i = 0;
+	int r = 0;
+	uint32_t *ib_addr = NULL;
+
+	for (i= 0; i < NDIRECT; i++) {
+		if (!f->f_direct[i])
+			return;
+
+		r = write_back (f->f_direct[i]);
+		if (r < 0) {
+			cprintf ("flush failed\n");
+			return;
+		}
+	}
+
+	if (!f->f_indirect)
+		return;
+
+	ib_addr = (uint32_t *) diskaddr ((uint64_t)f->f_indirect);
+
+	for (i=0; i < NINDIRECT; i++) {
+		if (!ib_addr[i])
+			break;
+
+		r = write_back (ib_addr[i]);
+		if (r < 0) {
+			cprintf ("flush failed on indirect block\n");
+			return;
+		}
+	}
+
+	r = write_back (f->f_indirect);
+	if (r < 0)
+		cprintf ("flush failed\n");
+
+	return;
+}
+
+void
+fs_sync(void)
+{
+	int i;
+
+	for (i = 0; i < NBLOCKS; i++)
+		write_back (i);
+}
+
+int
+file_remove(const char *path)
+{
+	struct File *f;
+	int r = 0;
+
+	r = walk_path (path, 0, &f, 0);
+	if (r < 0) {
+		cprintf ("Failed to remove file: %e\n", r);
+		return r;
+	}
+
+	r = handle_otrunc (f, 0);
+	if (r < 0) {
+		cprintf ("Failed to remove file: %e\n", r);
+		return r;
+	}
+
+	memset (&f, 0x00, sizeof (struct File));
+	mark_page_dirty (diskaddr ((uint64_t)blockof(&f)));
+	return 0;
+}
+
 // While implementing writeable FS - team defined prototypes
+bool
+page_is_dirty (char *addr)
+{
+	if (!((uvpml4e[VPML4E(addr)] & (uint64_t)PTE_P) &&
+		(uvpde[VPDPE(addr)] & (uint64_t)PTE_P) &&
+		(uvpd[VPD(addr)] & (uint64_t)PTE_P) &&
+		(uvpt [PGNUM(addr)] & (uint64_t)PTE_P)))
+
+		if (uvpt[PGNUM(addr)] & (uint64_t)PTE_D)
+			return 1;
+
+	return 1;
+}
+
+int
+write_back (uint32_t blkno)
+{
+	uint32_t secstart = blkno * BLKSECTS;
+	char *addrstart = diskaddr ((uint64_t)blkno);
+	int r = 0;
+
+	if (page_is_dirty(addrstart))
+		r = ide_write (secstart, (void *)addrstart, 4);
+
+	return r;
+}
+
 void
 bitmap_set_free (uint32_t blockno)
 {
@@ -469,15 +585,23 @@ skip_to_curdir (char *pathtmp, struct File **pdir, struct File **pf,
 }
 
 int
-handle_otrunc (struct File *f)
+handle_otrunc (struct File *f, size_t n)
 {
 	int i = 0;
 	uint32_t	*ib_addr	= NULL;
+	uint32_t	startpos	= 0;
 
 	if (f->f_type != FTYPE_REG)
 		return -1;
 
-	for (i = 0; i < NDIRECT; i++) {
+	if (n > f->f_size) {
+		cprintf ("We currently don't support sparse files\n");
+		return -1;
+	}
+
+	startpos = (n / BLKSIZE);
+
+	for (i = startpos; i < NDIRECT; i++) {
 		if (!f->f_direct[i])
 			return 0;
 
@@ -489,7 +613,8 @@ handle_otrunc (struct File *f)
 		return 0;
 
 	ib_addr = (uint32_t *) diskaddr ((uint64_t)f->f_indirect);
-	for (i = 0; i < NINDIRECT; i++) {
+	i = (startpos > NDIRECT)? startpos: 0;
+	for (; i < NINDIRECT; i++) {
 		if (!ib_addr[i])
 			break;
 

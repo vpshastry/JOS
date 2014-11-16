@@ -59,10 +59,11 @@ uint32_t get_free_block (void);
 void bitmap_init (void);
 int skip_to_curdir (char *pathtmp, struct File **pdir, struct File **pf,
 		char **ptr);
-int handle_otrunc (struct File *file);
+int handle_otrunc (struct File *file, size_t n);
 int handle_ocreate (char *path, struct File **curdir);
 int get_free_dirent (struct File *dir, struct File **file, char **block);
 void mark_page_dirty (char *pg);
 static int
 dirent_create (struct File *dir, const char *name, uint32_t filetype,
 		struct File **newfile);
+int write_back (uint32_t blkno);
