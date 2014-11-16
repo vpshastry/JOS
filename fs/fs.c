@@ -334,22 +334,6 @@ file_write(struct File *f, const void *buf, size_t count, off_t offset)
 		mark_page_dirty (blk);
 		f->f_size += lcount;
 	}
-	/*
-	   we need not to worry about more than one page since the req max size
-	   is PGSIZE
-	for (i = 1; lcount < count; i++) {
-		r = file_get_block (f, blockno + i, &blk);
-		if (r < 0) {
-			cprintf ("get block failed: %e\n", r);
-			break;
-		}
-
-		min = MIN (lcount, PGSIZE);
-		memcpy (blk, buf + lcount, min);
-		lcount += min;
-		mark_page_dirty (blk);
-	}
-	*/
 	return lcount;
 }
 
