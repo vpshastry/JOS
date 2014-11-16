@@ -122,7 +122,8 @@ file_get_block(struct File *f, uint32_t filebno, char **blk)
 	//panic("file_block_walk not implemented");
 	int		ret		= 0;
 	uint32_t	*ppdiskbno	= NULL;
-	bool		alloc		= (f->f_type == FTYPE_DIR)? 0: 1;
+	//bool		alloc		= (f->f_type == FTYPE_DIR)? 0: 1;
+	bool		alloc		= 1;
 
 	if (filebno > (NDIRECT + NINDIRECT)) {
 		cprintf ("\n\n\n filebno is out of range\n\n\n");
