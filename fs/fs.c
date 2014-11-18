@@ -98,12 +98,8 @@ file_block_walk(struct File *f, uint32_t filebno, uint32_t **ppdiskbno,
 
 	// If alloc flag set and the diskblock number is zero, allocate one
 out:
-	if (alloc && !**ppdiskbno) {
-		if (debug)
-			cprintf ("Allocating a new block for %s\n", f->f_name);
-
+	if (alloc && ((**ppdiskbno) == 0))
 		**ppdiskbno = alloc_block ();
-	}
 
 	return 0;
 }
@@ -318,10 +314,8 @@ file_write(struct File *f, const void *buf, size_t count, off_t offset)
 	min = MIN (count, PGSIZE - (offset%BLKSIZE));
 	memcpy (blk+ (offset % BLKSIZE), buf, min);
 	lcount += min;
-	mark_page_dirty (blk);
-	f->f_size += lcount;
 
-	/* write the remaining buf in a new block */
+	/*
 	if (lcount < count) {
 		r = file_get_block (f, blockno+1, &blk);
 		if (r < 0) {
@@ -332,9 +326,22 @@ file_write(struct File *f, const void *buf, size_t count, off_t offset)
 		min = MIN (count-lcount, PGSIZE);
 		memcpy (blk, buf + lcount, min);
 		lcount += min;
-		mark_page_dirty (blk);
 		f->f_size += lcount;
+	}*/
+	for (i = 1; lcount < count; i++) {
+		r = file_get_block (f, blockno + i, &blk);
+		if (r < 0) {
+			cprintf ("get block failed: %e\n", r);
+			break;
+		}
+	
+		min = MIN (count, PGSIZE);
+		memcpy (blk, buf + lcount, min);
+		lcount += min;
 	}
+
+	if ((r = file_set_size (f, (offset + lcount))) < 0)
+		cprintf ("failed to set size\n");
 	return lcount;
 }
 
@@ -423,7 +430,6 @@ file_remove(const char *path)
 	}
 
 	memset (&f, 0x00, sizeof (struct File));
-	mark_page_dirty (diskaddr ((uint64_t)blockof(&f)));
 	return 0;
 }
 
@@ -449,8 +455,14 @@ write_back (uint32_t blkno)
 	char *addrstart = diskaddr ((uint64_t)blkno);
 	int r = 0;
 
-	if (page_is_dirty(addrstart))
+	if (page_is_dirty(addrstart)) {
 		r = ide_write (secstart, (void *)addrstart, 4);
+		if (r < 0) {
+			cprintf ("IDE write failed\n");
+			return r;
+		}
+		//mark_page_UNdirty (addrstart);
+	}
 
 	return r;
 }
@@ -524,7 +536,7 @@ bitmap_init (void)
 	for (i = 0; i < nbitblocks; i++)
 		bitmap_clear_flag (2+i);
 }
-
+/*
 int
 skip_to_curdir (char *pathtmp, struct File **pdir, struct File **pf,
 		char **ptr)
@@ -583,7 +595,7 @@ skip_to_curdir (char *pathtmp, struct File **pdir, struct File **pf,
 	*pf = f;
 	return 0;
 }
-
+*/
 int
 handle_otrunc (struct File *f, size_t n)
 {
@@ -603,14 +615,14 @@ handle_otrunc (struct File *f, size_t n)
 
 	for (i = startpos; i < NDIRECT; i++) {
 		if (!f->f_direct[i])
-			return 0;
+			goto adjustfsize;
 
 		bitmap_set_free (f->f_direct[i]);
 		f->f_direct[i] = 0;
 	}
 
 	if (!f->f_indirect)
-		return 0;
+		goto adjustfsize;
 
 	ib_addr = (uint32_t *) diskaddr ((uint64_t)f->f_indirect);
 	i = (startpos > NDIRECT)? startpos: 0;
@@ -622,15 +634,42 @@ handle_otrunc (struct File *f, size_t n)
 		ib_addr[i] = 0;
 	}
 
-	// Free the indirect block as well
-	bitmap_set_free (f->f_indirect);
-	f->f_indirect = 0;
+	// Yes it should be <= think about it
+	if (startpos <= NDIRECT) {
+		// Free the indirect block as well
+		bitmap_set_free (f->f_indirect);
+		f->f_indirect = 0;
+	}
+
+adjustfsize:
+	f->f_size = n;
 
 	return 0;
 }
 
 int
-handle_ocreate (char *path, struct File **curdir)
+handle_ocreate (char *path, struct File **newfile)
+{
+	int r = 0;
+	char name[MAXNAMELEN] = {0,};
+	struct File *dir = NULL;
+	struct File *f = NULL;
+
+	r = walk_path (path, &dir, &f, name);
+	if (r != -E_NOT_FOUND || dir == NULL) {
+		cprintf ("Error on walkpath @handle_ocreate\n");
+		return r;
+	}
+
+	r = dirent_create (dir, name, FTYPE_REG, newfile);
+	if (r < 0) {
+		cprintf ("new file creation failed @handle_ocreate\n");
+		return r;
+	}
+
+	return 0;
+}
+/*
 {
 	int r = 0;
 	char *ptr = NULL;
@@ -638,6 +677,9 @@ handle_ocreate (char *path, struct File **curdir)
 	struct File *lcurdir = *curdir;
 	char creatFile[MAXNAMELEN];
 	struct File *newfile;
+
+	if (debug)
+		cprintf ("handle_ocreate: path: %s\n", path);
 
 	// not asking to create a file
 	if (path [strlen (path) - 1] == '/')
@@ -657,7 +699,8 @@ handle_ocreate (char *path, struct File **curdir)
 		if (ptr - p >= MAXNAMELEN)
 			return -E_BAD_PATH;
 
-		memmove (creatFile, p, ptr-p);
+		memcpy (creatFile, p, ptr-p);
+		creatFile[ptr-p] = '\0';
 
 		if (*ptr == '\0') {
 			dirent_create (lcurdir, creatFile, FTYPE_REG, &newfile);
@@ -673,6 +716,7 @@ handle_ocreate (char *path, struct File **curdir)
 		cprintf ("curdir: %s\n", (*curdir)->f_name);
 	return 0;
 }
+*/
 
 // Similar to dir_lookup, just looks for ""
 int
@@ -693,7 +737,7 @@ get_free_dirent (struct File *dir, struct File **file, char **block)
 			return r;
 		f = (struct File*) blk;
 		for (j = 0; j < BLKFILES; j++)
-			if (strcmp(f[j].f_name, "") == 0) {
+			if (strcmp (f[j].f_name, "") == 0) {
 				*file = &f[j];
 				*block = blk;
 				return 0;
@@ -703,15 +747,17 @@ get_free_dirent (struct File *dir, struct File **file, char **block)
 	return -E_NOT_FOUND;
 }
 
-
 void
-mark_page_dirty (char *pg)
+mark_page_UNdirty (char *pg)
 {
 	// TODO: Check whether this is correct
 	uint64_t perm = uvpt[PGNUM(pg)] & PTE_SYSCALL;
 	int	r = 0;
 
-	r = sys_page_map (0, (void *)pg, 0, (void *)pg, perm | PTE_D);
+	// Remove dirty flag
+	perm &= ~((uint64_t)PTE_D);
+
+	r = sys_page_map (0, (void *)pg, 0, (void *)pg, perm);
 	if (r < 0)
 		cprintf ("\nfailed to mark dirty: %e\n", r);
 }
@@ -738,7 +784,6 @@ dirent_create (struct File *dir, const char *name, uint32_t filetype,
 	strcpy ((*newfile)->f_name, name);
 	(*newfile)->f_size = 0;
 	(*newfile)->f_type = filetype;
-	mark_page_dirty (pg);
 
 	return 0;
 }

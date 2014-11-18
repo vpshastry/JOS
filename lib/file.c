@@ -174,7 +174,7 @@ devfile_write (struct Fd *fd, const void *buf, size_t n)
 				fd->fd_file.id, buf, n);
 
 	fsipcbuf.write.req_n = n;
-	strncpy (fsipcbuf.write.req_buf, buf, n);
+	memcpy (fsipcbuf.write.req_buf, buf, n);
 	fsipcbuf.write.req_fileid = fd->fd_file.id;
 
 	nbytes = fsipc (FSREQ_WRITE, 0);

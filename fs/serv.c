@@ -255,6 +255,29 @@ serve_stat(envid_t envid, union Fsipc *ipc)
 int
 serve_flush(envid_t envid, struct Fsreq_flush *req)
 {
+	//struct Fsreq_flush *req = &ipc->flush;
+
+	if (debug)
+		cprintf("serve_flush %08x %08x\n", envid, req->req_fileid);
+
+	struct OpenFile	*openfile	= NULL;
+	int		r		= 0;
+
+	r = openfile_lookup (envid, req->req_fileid, &openfile);
+	if (r < 0) {
+		cprintf ("\n\n\n Failed to lookup @serve_trunc\n\n\n");
+		return r;
+	}
+
+	file_flush (openfile->o_file);
+
+	return 0;
+}
+
+int
+serve_sync(envid_t envid, union Fsipc *req)
+{
+	fs_sync ();
 	return 0;
 }
 
@@ -270,6 +293,7 @@ fshandler handlers[] = {
 	// while making writeable FS
 	[FSREQ_WRITE] = 	serve_write,
 	[FSREQ_TRUNC] = 	serve_trunc,
+	[FSREQ_SYNC] = 		serve_sync,
 };
 #define NHANDLERS (sizeof(handlers)/sizeof(handlers[0]))
 
@@ -286,6 +310,7 @@ serve(void)
 		if (debug)
 			cprintf("fs req %d from %08x [page %08x: %s]\n",
 				req, whom, uvpt[PGNUM(fsreq)], fsreq);
+
 
 		// All requests must contain an argument page
 		if (!(perm & PTE_P)) {
@@ -344,8 +369,8 @@ serve_write (envid_t envid, union Fsipc *ipc)
 		return r;
 	}
 
-	if (req->req_n > (PGSIZE - (sizeof(int) + sizeof(size_t))))
-		req->req_n = PGSIZE - (sizeof(int) + sizeof(size_t));
+	if (req->req_n > (PGSIZE - (sizeof (int) + sizeof (size_t))))
+		req->req_n = PGSIZE - (sizeof (int) + sizeof (size_t));
 
 	size_written = file_write (openfile->o_file, req->req_buf, req->req_n,
 					openfile->o_fd->fd_offset);

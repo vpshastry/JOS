@@ -15,3 +15,5 @@ Clarify:
 * While marking page dirty, how to copy the old permissions?
 * sys_page_map while checking for the permissions throws error for PTE_D
 * Marking page dirty, enough? or do we need to flush it?
+* sys page map doesn't allow PTE_D to be set from the user level? how do we set
+it, currently removed that checking.

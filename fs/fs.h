@@ -62,6 +62,7 @@ int skip_to_curdir (char *pathtmp, struct File **pdir, struct File **pf,
 int handle_otrunc (struct File *file, size_t n);
 int handle_ocreate (char *path, struct File **curdir);
 int get_free_dirent (struct File *dir, struct File **file, char **block);
+void mark_page_UNdirty (char *pg);
 void mark_page_dirty (char *pg);
 static int
 dirent_create (struct File *dir, const char *name, uint32_t filetype,
