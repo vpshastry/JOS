@@ -445,7 +445,7 @@ page_is_dirty (char *addr)
 		if (uvpt[PGNUM(addr)] & (uint64_t)PTE_D)
 			return 1;
 
-	return 1;
+	return 0;
 }
 
 int
@@ -461,7 +461,7 @@ write_back (uint32_t blkno)
 			cprintf ("IDE write failed\n");
 			return r;
 		}
-		//mark_page_UNdirty (addrstart);
+		mark_page_UNdirty (addrstart);
 	}
 
 	return r;
@@ -753,13 +753,12 @@ mark_page_UNdirty (char *pg)
 	// TODO: Check whether this is correct
 	uint64_t perm = uvpt[PGNUM(pg)] & PTE_SYSCALL;
 	int	r = 0;
-
 	// Remove dirty flag
 	perm &= ~((uint64_t)PTE_D);
 
 	r = sys_page_map (0, (void *)pg, 0, (void *)pg, perm);
 	if (r < 0)
-		cprintf ("\nfailed to mark dirty: %e\n", r);
+		cprintf ("\nfailed to remove dirty: %e\n", r);
 }
 
 /* Given a name and filetype creates a dirent under dir */
