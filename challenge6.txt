@@ -1,3 +1,18 @@
 List challenge problems completed as part of the lab 6 handin, as well
 as the problem number.  If you worked any previous lab challenges and
 submitted them with this lab, list them here, along with the lab number.
+
+Lab 5 challenge 3 - writeable file system (20 points)
+-----------------------------------------
+We've implemented the writeable file system as part of the lab 5 challenge 3.
+
+How we did it:
+We've followed the instructions provided in the website below the challenge
+description.
+
+How to test:
+The testfiles
+user/testfile.c
+user/writemotd.c
+tests the writeable file system functionalities. Please run the
+make run-<testfile|writemotd>-nox to test the functionalities.
