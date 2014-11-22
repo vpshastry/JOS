@@ -524,6 +524,14 @@ sys_transmit_packet_e1000 (char *pkt, int len)
 	return transmit_packet_e1000 (pkt, len);
 }
 
+//Transmit packet via E1000
+int sys_receive_packet_e1000(char *pkt)
+{
+	return receive_packet_e1000(pkt); 
+	
+}
+
+
 // Dispatches to the correct kernel function, passing the arguments.
 int64_t
 syscall(uint64_t syscallno, uint64_t a1, uint64_t a2, uint64_t a3, uint64_t a4, uint64_t a5)
@@ -586,6 +594,9 @@ syscall(uint64_t syscallno, uint64_t a1, uint64_t a2, uint64_t a3, uint64_t a4, 
 
 	case SYS_transmit_packet_e1000:
 		return sys_transmit_packet_e1000 ((char *)a1, (int) a2);
+
+	case SYS_receive_packet_e1000:
+		return sys_receive_packet_e1000((char *)a1);
 
 	default:
 		return -E_INVAL;

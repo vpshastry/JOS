@@ -135,5 +135,5 @@ struct rx_desc
 
 int pci_enable_e1000_attach(struct pci_func *func);
 int transmit_packet_e1000(char *pkt, int len);
-int receive_packet_e1000(char *pkt, int len);
+int receive_packet_e1000(char *pkt);
 #endif	// JOS_KERN_E1000_H

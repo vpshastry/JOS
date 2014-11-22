@@ -129,3 +129,9 @@ sys_transmit_packet_e1000(char *pkt, int len)
 	return syscall (SYS_transmit_packet_e1000, 1, (uint64_t)pkt, len,
 			0, 0, 0);
 }
+
+int
+sys_receive_packet_e1000(char *pkt)
+{
+	return (int) syscall(SYS_receive_packet_e1000,1,(uint64_t)pkt,0,0,0,0);
+}

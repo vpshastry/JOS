@@ -78,6 +78,13 @@ pci_enable_e1000_attach(struct pci_func *func)
 	/********************************************************************
 			TRANSMISSION ENDS HERE
 	********************************************************************/
+	//Recieve Initialization
+	for(i=0;i<64;i++){
+		new_rx_desc_arr[i].addr = PADDR(recv_pkt_bufs[i]);
+		
+		new_rx_desc_arr[i].status = 0x01;	
+		
+	}
 
 	e1000_virtual_base[E1000_RA/4] = 0x12005452;
 	e1000_virtual_base[(E1000_RA+4)/4] = 0x5634 | E1000_RAH_AV;
@@ -146,7 +153,7 @@ transmit_packet_e1000 (char *pkt, int len)
 }
 
 int
-receive_packet_e1000(char *pkt, int len){
+receive_packet_e1000(char *pkt){
 	//Recognize the prescence of packet on a wire
 	//Perform address filtering
 	//store packet in recieve data FIFO
@@ -158,9 +165,11 @@ receive_packet_e1000(char *pkt, int len){
 	//5 filtering modes
 
 	//52:55:0a:00:02:02
-/*
 
 	uint32_t i = e1000_virtual_base[E1000_RDT/4];
+
+	int len = new_rx_desc_arr[i].length;
+	
 
 	while((new_rx_desc_arr[i].status & 0x01) == 0 ){
 		i = (i+1)%64;
@@ -170,12 +179,11 @@ receive_packet_e1000(char *pkt, int len){
 
 	//Copy Pft data into buffer
 	if(len > 1518){
-		panic("Big Packet, Cant Transmit\n");
+		panic("Big Packet, Cant Receive\n");
 	}
 
 	memmove(pkt, new_pkt_bufs_arr[i], len);
 
-	new_tx_desc_arr[i].length = len;
 
 
 	//REMOVE THE DD BIT INITIALIZED, RESET TO 0.
@@ -184,10 +192,9 @@ receive_packet_e1000(char *pkt, int len){
 	//new_tx_desc_arr[i].status = 0;
 
 	//SET EOP  Bit to 1
-	new_tx_desc_arr[i].cmd |= (0x01 | 0x08);
+	new_tx_desc_arr[i].status |= 0x10;
 
 	//SET TDT
 	e1000_virtual_base[E1000_TDT/4] = (i+1)%64;
-*/
 	return 0;
 }
