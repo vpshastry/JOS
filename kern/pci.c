@@ -30,6 +30,7 @@ struct pci_driver pci_attach_class[] = {
 
 // pci_attach_vendor matches the vendor ID and device ID of a PCI device
 struct pci_driver pci_attach_vendor[] = {
+	{0x8086,0x100e, &pci_enable_e1000_attach},
 	{ 0, 0, 0 },
 };
 
@@ -251,6 +252,5 @@ pci_init(void)
 {
 	static struct pci_bus root_bus;
 	memset(&root_bus, 0, sizeof(root_bus));
-
 	return pci_scan_bus(&root_bus);
 }

@@ -9,6 +9,7 @@
 #include <kern/pmap.h>
 #include <kern/trap.h>
 #include <kern/syscall.h>
+#include <kern/e1000.h>
 #include <kern/console.h>
 #include <kern/sched.h>
 #include <kern/time.h>
@@ -414,7 +415,7 @@ static int
 sys_ipc_try_send(envid_t envid, uint32_t value, void *srcva, unsigned perm)
 {
 	// LAB 4: Your code here.
-	struct Env *e;
+	struct Env *e = NULL;
 
 	int result = envid2env(envid, &e, 0);
 
@@ -423,7 +424,6 @@ sys_ipc_try_send(envid_t envid, uint32_t value, void *srcva, unsigned perm)
 		return result;
 	}
 
-//	cprintf("Sender [%lx], Receiver [%lx], recv = %d\n", curenv->env_id, e->env_id, e->env_ipc_recving);
 
 	if(e->env_ipc_recving==0){
 //		cprintf ("Reciever not ready\n");
@@ -437,7 +437,7 @@ sys_ipc_try_send(envid_t envid, uint32_t value, void *srcva, unsigned perm)
 		}
 		if(!(perm & PTE_SYSCALL)){
 			cprintf("Permission error: %e", -E_INVAL);
-			return -E_INVAL;	
+			return -E_INVAL;
 		}
 
 		if(!((perm & PTE_U)&&(perm & PTE_P))){
@@ -493,17 +493,16 @@ sys_ipc_recv(void *dstva)
 			return -E_INVAL;
 		}
 	}
-	int result=0;	
-	/*	int result = sys_page_unmap(curenv->env_id,dstva);	
+	int result=0;
+	/*	int result = sys_page_unmap(curenv->env_id,dstva);
 		if(result < 0){
-			return result;	
+			return result;
 		}*/
 
 	curenv->env_ipc_recving = 1;
 	curenv->env_ipc_dstva = dstva;
 	curenv->env_status = ENV_NOT_RUNNABLE;
 	sched_yield();
-		
 	return 0;
 	//	panic("sys_ipc_recv not implemented");
 }
@@ -518,7 +517,12 @@ sys_time_msec(void)
 	return time_msec ();
 }
 
-
+//Transmit packet via E1000
+int
+sys_transmit_packet_e1000 (char *pkt, int len)
+{
+	return transmit_packet_e1000 (pkt, len);
+}
 
 // Dispatches to the correct kernel function, passing the arguments.
 int64_t
@@ -579,6 +583,9 @@ syscall(uint64_t syscallno, uint64_t a1, uint64_t a2, uint64_t a3, uint64_t a4, 
 
 	case SYS_time_msec:
 		return sys_time_msec ();
+
+	case SYS_transmit_packet_e1000:
+		return sys_transmit_packet_e1000 ((char *)a1, (int) a2);
 
 	default:
 		return -E_INVAL;
