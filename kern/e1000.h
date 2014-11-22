@@ -108,6 +108,9 @@
 #define E1000_RAH_AV  0x80000000        /* Receive descriptor valid */
 #define E1000_RA       0x05400  /* Receive Address - RW Array */
 #define E1000_RCTL     0x00100  /* RX Control - RW */
+#define E1000_RXD_STAT_DD       0x01    /* Descriptor Done */
+#define E1000_RXD_STAT_EOP      0x02    /* End of Packet */
+
 
 struct tx_desc
 {

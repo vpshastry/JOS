@@ -2,7 +2,6 @@
 #include <inc/lib.h>
 
 extern union Nsipc nsipcbuf;
-
 void
 input(envid_t ns_envid)
 {
@@ -16,17 +15,30 @@ input(envid_t ns_envid)
 	// another packet in to the same physical page.
 
 
-	char *data=NULL;
+	int result=0;
 
+	while (1) {
+		sys_page_alloc(0, &nsipcbuf,PTE_U | PTE_P | PTE_W);
 
-	int length = sys_receive_packet_e1000(data);
-	if(length == -1){
-		panic("Something wrong with recieve packet");
+		result = sys_receive_packet_e1000(nsipcbuf.pkt.jp_data);
+
+		unsigned now = sys_time_msec();
+		unsigned end = now + 100 * 1;
+
+		if(result == -1){
+			while(sys_time_msec() <end)
+				sys_yield();
+
+			continue;
+		}
+
+		nsipcbuf.pkt.jp_len=result;
+
+		ipc_send(ns_envid, NSREQ_INPUT, &nsipcbuf, PTE_P | PTE_W | PTE_U);
+
+		while(sys_time_msec() <end)
+			sys_yield();
 	}
-	
-	memmove(nsipcbuf.pkt.jp_data,data,length);
-
-	ipc_send(ns_envid, NSREQ_INPUT, &nsipcbuf, PTE_P|PTE_W|PTE_U);
-
-
 }
+
+
