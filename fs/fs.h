@@ -11,8 +11,13 @@
 /* Maximum disk size we can handle (3GB) */
 #define DISKSIZE	0xC0000000
 
+// Whiel implementing writeable FS
+uint32_t *bitmap;		// bitmap blocks mapped in memory 1= free, 0 = used
+#define NBLOCKS  (super->s_nblocks)
+// <end> writeable FS declaration
+
 struct Super *super;		// superblock
-uint32_t *bitmap;		// bitmap blocks mapped in memory
+char *diskpos;
 
 /* ide.c */
 bool	ide_probe_disk1(void);
@@ -41,8 +46,25 @@ void	fs_sync(void);
 
 /* int	map_block(uint32_t); */
 bool	block_is_free(uint32_t blockno);
-int	alloc_block(void);
+uint32_t alloc_block(void);
 
 /* test.c */
 void	fs_test(void);
 
+/* delcared for writeable FS */
+void bitmap_set_free (uint32_t blockno);
+void bitmap_clear_flag (uint32_t blockno);
+uint32_t blockof(void *pos);
+uint32_t get_free_block (void);
+void bitmap_init (void);
+int skip_to_curdir (char *pathtmp, struct File **pdir, struct File **pf,
+		char **ptr);
+int handle_otrunc (struct File *file, size_t n);
+int handle_ocreate (char *path, struct File **curdir);
+int get_free_dirent (struct File *dir, struct File **file, char **block);
+void mark_page_UNdirty (char *pg);
+void mark_page_dirty (char *pg);
+static int
+dirent_create (struct File *dir, const char *name, uint32_t filetype,
+		struct File **newfile);
+int write_back (uint32_t blkno);

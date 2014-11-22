@@ -48,6 +48,9 @@ struct OpenFile opentab[MAXOPEN] = {
 // Virtual address at which to receive page mappings containing client requests.
 union Fsipc *fsreq = (union Fsipc *)0x0ffff000;
 
+int serve_write (envid_t envid, union Fsipc *ipc);
+int serve_trunc (envid_t envid, union Fsipc *ipc);
+
 void
 serve_init(void)
 {
@@ -118,22 +121,42 @@ serve_open(envid_t envid, struct Fsreq_open *req,
 
 	// Find an open file ID
 	if ((r = openfile_alloc(&o)) < 0) {
-		if (debug)
+		//if (debug)
 			cprintf("openfile_alloc failed: %e", r);
 		return r;
 	}
 	fileid = r;
 
-	if (req->req_omode != 0) {
-		if (debug)
+	/*if (req->req_omode != 0) {
+		//if (debug)
 			cprintf("file_open omode 0x%x unsupported", req->req_omode);
 		return -E_INVAL;
 	}
+	*/
 
 	if ((r = file_open(path, &f)) < 0) {
+		// Error out if not (create mode and enotfound)
+		if (!((req->req_omode & O_CREAT) && r == -E_NOT_FOUND)) {
+			if (debug)
+				cprintf("file_open failed: %e", r);
+			return r;
+		}
+
 		if (debug)
-			cprintf("file_open failed: %e", r);
-		return r;
+			cprintf ("Creating new file: %s\n", f->f_name);
+
+		r = handle_ocreate (path, &f);
+		if (r < 0) {
+			cprintf ("\nnew creation failed: %e\n", r);
+			return r;
+		}
+	}
+
+	if (req->req_omode & O_TRUNC) {
+		if (debug)
+			cprintf ("Truncating the file: %s\n", f->f_name);
+
+		handle_otrunc (f, 0);
 	}
 
 	// Save the file pointer
@@ -232,6 +255,29 @@ serve_stat(envid_t envid, union Fsipc *ipc)
 int
 serve_flush(envid_t envid, struct Fsreq_flush *req)
 {
+	//struct Fsreq_flush *req = &ipc->flush;
+
+	if (debug)
+		cprintf("serve_flush %08x %08x\n", envid, req->req_fileid);
+
+	struct OpenFile	*openfile	= NULL;
+	int		r		= 0;
+
+	r = openfile_lookup (envid, req->req_fileid, &openfile);
+	if (r < 0) {
+		cprintf ("\n\n\n Failed to lookup @serve_trunc\n\n\n");
+		return r;
+	}
+
+	file_flush (openfile->o_file);
+
+	return 0;
+}
+
+int
+serve_sync(envid_t envid, union Fsipc *req)
+{
+	fs_sync ();
 	return 0;
 }
 
@@ -243,6 +289,11 @@ fshandler handlers[] = {
 	[FSREQ_READ] =		serve_read,
 	[FSREQ_STAT] =		serve_stat,
 	[FSREQ_FLUSH] =		(fshandler)serve_flush,
+
+	// while making writeable FS
+	[FSREQ_WRITE] = 	serve_write,
+	[FSREQ_TRUNC] = 	serve_trunc,
+	[FSREQ_SYNC] = 		serve_sync,
 };
 #define NHANDLERS (sizeof(handlers)/sizeof(handlers[0]))
 
@@ -259,6 +310,7 @@ serve(void)
 		if (debug)
 			cprintf("fs req %d from %08x [page %08x: %s]\n",
 				req, whom, uvpt[PGNUM(fsreq)], fsreq);
+
 
 		// All requests must contain an argument page
 		if (!(perm & PTE_P)) {
@@ -297,3 +349,69 @@ umain(int argc, char **argv)
 	serve();
 }
 
+// Below are created while implementing writeable FS
+int
+serve_write (envid_t envid, union Fsipc *ipc)
+{
+	struct Fsreq_write *req = &ipc->write;
+
+	if (debug)
+		cprintf("serve_write %08x %08x %08x\n", envid, req->req_fileid, req->req_n);
+
+	struct OpenFile	*openfile	= NULL;
+	size_t		size_written	= -1;
+	int		r		= 0;
+
+	r = openfile_lookup (envid, req->req_fileid, &openfile);
+	if (r < 0) {
+		cprintf ("\n\n\n Failed to lookup @serve_write\n\n\n");
+		return r;
+	}
+
+	if (req->req_n > (PGSIZE - (sizeof (int) + sizeof (size_t))))
+		req->req_n = PGSIZE - (sizeof (int) + sizeof (size_t));
+
+	size_written = file_write (openfile->o_file, req->req_buf, req->req_n,
+					openfile->o_fd->fd_offset);
+	if (size_written < 0) {
+		cprintf ("\n\n\n failed to write file @serve_write\n\n\n");
+		return size_written;
+	}
+
+	openfile->o_fd->fd_offset += size_written;
+	return size_written;
+}
+
+int
+serve_trunc (envid_t envid, union Fsipc *ipc)
+{
+	struct Fsreq_trunc *req = &ipc->trunc;
+
+	if (debug)
+		cprintf("serve_trunc %08x %08x %08x\n", envid,
+				req->req_fileid, req->req_n);
+
+	struct OpenFile	*openfile	= NULL;
+	int		r		= 0;
+
+	r = openfile_lookup (envid, req->req_fileid, &openfile);
+	if (r < 0) {
+		cprintf ("\n\n\n Failed to lookup @serve_trunc\n\n\n");
+		return r;
+	}
+
+	if (req->req_n % BLKSIZE) {
+		cprintf ("We currently don't support non aligned trunc");
+		return -1;
+	}
+
+	r = handle_otrunc (openfile->o_file, req->req_n);
+	if (r < 0) {
+		cprintf ("\n\n\n failed to trunc file @serve_trunc\n\n\n");
+		return r;
+	}
+
+	openfile->o_fd->fd_offset = 0;
+	openfile->o_file->f_size = 0;
+	return 0;
+}

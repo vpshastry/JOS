@@ -41,6 +41,8 @@ struct Dev devfile =
 	.dev_read =	devfile_read,
 	.dev_close =	devfile_flush,
 	.dev_stat =	devfile_stat,
+	.dev_write =    devfile_write,
+	.dev_trunc =    devfile_trunc,
 };
 
 // Open a file (or directory).
@@ -70,6 +72,7 @@ open(const char *path, int mode)
 	//panic ("open not implemented");
 	struct Fd	*newFd	= NULL;
 	int		ret	= 0;
+	static int	i	= 1;
 
 	if (strlen (path) > MAXPATHLEN) {
 		cprintf ("\n\n\nLength of the path is more than the lim\n\n\n");
@@ -146,7 +149,6 @@ devfile_read(struct Fd *fd, void *buf, size_t n)
 	return nbytes;
 }
 
-
 static int
 devfile_stat(struct Fd *fd, struct Stat *st)
 {
@@ -161,4 +163,42 @@ devfile_stat(struct Fd *fd, struct Stat *st)
 	return 0;
 }
 
+// Implemented for writeable FS
+static ssize_t
+devfile_write (struct Fd *fd, const void *buf, size_t n)
+{
+	int	nbytes	= 0;
 
+	if (debug)
+		cprintf ("@devfile_write: file id: %d, buf: %p, size: %d\n",
+				fd->fd_file.id, buf, n);
+
+	fsipcbuf.write.req_n = n;
+	memcpy (fsipcbuf.write.req_buf, buf, n);
+	fsipcbuf.write.req_fileid = fd->fd_file.id;
+
+	nbytes = fsipc (FSREQ_WRITE, 0);
+	if (nbytes < 0) {
+		cprintf ("\n\n\n failed fsipc @devfile_write: %e\n", nbytes);
+		return nbytes;
+	}
+
+	return nbytes;
+}
+
+static int
+devfile_trunc(struct Fd *fd, off_t newsize)
+{
+	int r = 0;
+
+	fsipcbuf.trunc.req_n = newsize;
+	fsipcbuf.trunc.req_fileid = fd->fd_file.id;
+
+	r = fsipc (FSREQ_TRUNC, 0);
+	if (r < 0) {
+		cprintf ("\n\n\n failed fsipc @devfile_trunc: %e\n");
+		return r;
+	}
+
+	return r;
+}
