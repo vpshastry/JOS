@@ -44,6 +44,8 @@ fs_init(void)
 	check_super();
 
 	bitmap_init ();
+	journal_init ();
+	//journal_checkand_repair ();
 }
 
 // Find the disk block number slot for the 'filebno'th block in file 'f'.
@@ -53,7 +55,7 @@ fs_init(void)
 // When 'alloc' is set, this function will allocate an indirect block
 // if necessary.
 //
-//  Note, for the read-only file system (lab 5 without the challenge), 
+//  Note, for the read-only file system (lab 5 without the challenge),
 //        alloc will always be false.
 //
 // Returns:
@@ -87,7 +89,7 @@ file_block_walk(struct File *f, uint32_t filebno, uint32_t **ppdiskbno,
 
 		//panic ("Can't allocate in a read-only FS");
 		// Allocate a block for indirect addressing
-		f->f_indirect = alloc_block ();
+		f->f_indirect = alloc_block (f);
 		memset ((void *)diskaddr ((uint64_t)f->f_indirect), 0x0,
 				PGSIZE);
 	}
@@ -99,7 +101,7 @@ file_block_walk(struct File *f, uint32_t filebno, uint32_t **ppdiskbno,
 	// If alloc flag set and the diskblock number is zero, allocate one
 out:
 	if (alloc && ((**ppdiskbno) == 0))
-		**ppdiskbno = alloc_block ();
+		**ppdiskbno = alloc_block (f);
 
 	return 0;
 }
@@ -314,6 +316,8 @@ file_write(struct File *f, const void *buf, size_t count, off_t offset)
 	min = MIN (count, PGSIZE - (offset%BLKSIZE));
 	memcpy (blk+ (offset % BLKSIZE), buf, min);
 	lcount += min;
+	if ((r = journal_add(JWRITE, (uintptr_t)blk, 0)) < 0)
+		cprintf ("Failed to journal the write\n");
 
 	/*
 	if (lcount < count) {
@@ -334,10 +338,12 @@ file_write(struct File *f, const void *buf, size_t count, off_t offset)
 			cprintf ("get block failed: %e\n", r);
 			break;
 		}
-	
+
 		min = MIN (count, PGSIZE);
 		memcpy (blk, buf + lcount, min);
 		lcount += min;
+		if ((r = journal_add(JWRITE, (uintptr_t)blk, 0)) < 0)
+			cprintf ("Failed to journal the write\n");
 	}
 
 	if ((r = file_set_size (f, (offset + lcount))) < 0)
@@ -423,6 +429,9 @@ file_remove(const char *path)
 		return r;
 	}
 
+	if ((r = journal_add (JREMOVE_FILE, (uintptr_t)f, 0)) < 0)
+		cprintf ("Adding entry to journel failed\n");
+
 	r = handle_otrunc (f, 0);
 	if (r < 0) {
 		cprintf ("Failed to remove file: %e\n", r);
@@ -468,20 +477,37 @@ write_back (uint32_t blkno)
 }
 
 void
-bitmap_set_free (uint32_t blockno)
+bitmap_set_free (uint32_t blockno, struct File *f)
 {
+	int r = 0;
 	bitmap[blockno/32] |= (1<<(blockno%32));
+
+	if ((r = write_back (blockof((void *)&bitmap[blockno/32]))) <0)
+		cprintf ("Failed to sync block no: %d\n",
+				blockof ((void *)&bitmap[blockno/32]));
+
+	if (journal_add(JBITMAP_SET, (uintptr_t)f, (uint64_t)blockno) <0)
+		cprintf ("Failed to add to journal\n");
 }
 
 // Clears the bit
 void
-bitmap_clear_flag (uint32_t blockno)
+bitmap_clear_flag (uint32_t blockno, struct File *f)
 {
+	int r = 0;
+
 	bitmap[blockno/32] &= ~(1<<(blockno%32));
+
+	if ((r = write_back (blockof((void *)&bitmap[blockno/32]))) <0)
+		cprintf ("Failed to sync block no: %d\n",
+				blockof ((void *)&bitmap[blockno/32]));
+
+	if (journal_add(JBITMAP_CLEAR, (uintptr_t)f, (uint64_t)blockno) <0)
+		cprintf ("Failed to add to journal\n");
 }
 
 bool
-block_is_free (uint32_t blockno)
+is_block_free (uint32_t blockno)
 {
 	return (bitmap[blockno/32] & (1<<(blockno%32)));
 }
@@ -501,21 +527,21 @@ get_free_block (void)
 	nbitblocks = (NBLOCKS + BLKBITSIZE - 1) / BLKBITSIZE;
 
 	for (i = (2 +nbitblocks +1); i < NBLOCKS; i ++)
-		if (block_is_free (i))
+		if (is_block_free (i))
 			return i;
 
 	return -1;
 }
 
 uint32_t
-alloc_block (void)
+alloc_block (struct File *f)
 {
 	uint32_t freeblock = 0;
 
 	if ((freeblock = get_free_block ()) < 0)
 		panic ("out of memory");
 
-	bitmap_clear_flag (freeblock);
+	bitmap_clear_flag (freeblock, f);
 	return freeblock;
 }
 
@@ -531,10 +557,10 @@ bitmap_init (void)
 	memset(bitmap, 0xFF, nbitblocks * BLKSIZE);
 
 	// Clear the blocks 0, 1, and bitmap stored blocks
-	bitmap_clear_flag (0);
-	bitmap_clear_flag (1);
+	bitmap_clear_flag (0, NULL);
+	bitmap_clear_flag (1, NULL);
 	for (i = 0; i < nbitblocks; i++)
-		bitmap_clear_flag (2+i);
+		bitmap_clear_flag (2+i, NULL);
 }
 /*
 int
@@ -617,7 +643,7 @@ handle_otrunc (struct File *f, size_t n)
 		if (!f->f_direct[i])
 			goto adjustfsize;
 
-		bitmap_set_free (f->f_direct[i]);
+		bitmap_set_free (f->f_direct[i], f);
 		f->f_direct[i] = 0;
 	}
 
@@ -630,14 +656,14 @@ handle_otrunc (struct File *f, size_t n)
 		if (!ib_addr[i])
 			break;
 
-		bitmap_set_free (ib_addr[i]);
+		bitmap_set_free (ib_addr[i], f);
 		ib_addr[i] = 0;
 	}
 
 	// Yes it should be <= think about it
 	if (startpos <= NDIRECT) {
 		// Free the indirect block as well
-		bitmap_set_free (f->f_indirect);
+		bitmap_set_free (f->f_indirect, f);
 		f->f_indirect = 0;
 	}
 
@@ -786,3 +812,139 @@ dirent_create (struct File *dir, const char *name, uint32_t filetype,
 
 	return 0;
 }
+
+/* Journalling */
+int
+journal_init (void)
+{
+	int r = 0;
+	int i = 0;
+
+	if ((r = openfile_alloc (&jopenfile)) < 0) {
+		cprintf ("Failed to create journal file\n");
+		return r;
+	}
+
+	if (handle_ocreate (JFILE_PATH, &jfile) < 0)
+		panic ("Failed to create journal file\n");
+
+	jopenfile->o_file = jfile;
+	jopenfile->o_fd->fd_file.id = jopenfile->o_fileid;
+	jopenfile->o_fd->fd_omode = O_RDWR;
+	jopenfile->o_fd->fd_dev_id = devfile.dev_id;
+	jopenfile->o_mode = O_RDWR;
+
+	for (i =0; i <NJBLKS; i++) {
+		bitmap_clear_flag (i +JBLK_START, jfile);
+		jfile->f_direct[i] = (i +JBLK_START);
+	}
+
+	jfile->f_size = NJBLKS *BLKSIZE;
+	jfile->f_type = FTYPE_JOURN;
+	strcpy (jfile->f_name, JFILE_NAME);
+	return 0;
+}
+
+int
+journal_get_buf (jtype_t jtype, uintptr_t farg, uint64_t sarg, char **buf)
+{
+	jrdwr_t j;
+
+	switch (jtype) {
+	case JBITMAP_SET:
+		j.jtype = jtype;
+		j.args.jbitmap_set.blockno = (uint64_t)farg;
+		j.args.jbitmap_set.structFile = (uintptr_t)sarg;
+
+		if (JOURNAL_ISBINARY)
+			goto jbinary;
+
+		snprintf (*buf, MAXJBUFSIZE, "%d:%d:%x\n", j.jtype,
+				j.args.jbitmap_set.blockno,
+				j.args.jbitmap_set.structFile);
+		return strlen (*buf);
+
+	case JBITMAP_CLEAR:
+		j.jtype = jtype;
+		j.args.jbitmap_clear.blockno = (uint64_t)farg;
+		j.args.jbitmap_clear.structFile = (uintptr_t)sarg;
+
+		if (JOURNAL_ISBINARY)
+			goto jbinary;
+
+		snprintf (*buf, MAXJBUFSIZE, "%d:%d:%x\n", j.jtype,
+				j.args.jbitmap_clear.blockno,
+				j.args.jbitmap_clear.structFile);
+		return strlen (*buf);
+
+	case JWRITE:
+		j.jtype = jtype;
+		j.args.jwrite.structFile = (uintptr_t)farg;
+
+		if (JOURNAL_ISBINARY)
+			goto jbinary;
+
+		snprintf (*buf, MAXJBUFSIZE, "%d:%x\n", j.jtype,
+				j.args.jwrite.structFile);
+
+		return strlen (*buf);
+
+	case JREMOVE_FILE:
+		j.jtype = jtype;
+		j.args.jremove_file.structFile = (uintptr_t)farg;
+
+		if (JOURNAL_ISBINARY)
+			goto jbinary;
+
+		snprintf (*buf, MAXJBUFSIZE, "%d:%x\n", j.jtype,
+				j.args.jremove_file.structFile);
+
+		return strlen (*buf);
+
+	default:
+		cprintf ("Dude, You're in wrong place\n");
+	}
+
+	return -1;
+
+jbinary:
+	memcpy (buf, (void *)&j, sizeof (j));
+	return sizeof j;
+}
+
+
+int
+journal_add (jtype_t jtype, uintptr_t farg, uint64_t sarg)
+{
+	int r = 0;
+	int i = 0;
+	char *buf;
+
+	if ((r = journal_get_buf (jtype, farg, sarg, &buf)) < 0) {
+		cprintf ("Failed to fill the buf\n");
+		return r;
+	}
+
+	r = file_write (jfile, (void *)buf, r, jopenfile->o_fd->fd_offset);
+	if (r < 0) {
+		cprintf ("Failed to add entry to journal: %e\n", r);
+		return r;
+	}
+
+	jfile->f_direct[NDIRECT -1] = (jopenfile->o_fd->fd_offset += r);
+
+	write_back (blockof ((void *)jfile));
+	write_back (jfile->f_direct[NDIRECT -1]);
+	for (i =0; i <NJBLKS; i++)
+		write_back (jfile->f_direct[i]);
+
+	return 0;
+}
+
+/*
+int
+journal_checkand_repair ()
+{
+	while
+}
+*/

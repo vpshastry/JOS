@@ -11,10 +11,58 @@
 /* Maximum disk size we can handle (3GB) */
 #define DISKSIZE	0xC0000000
 
+/* From serv.c */
+struct OpenFile {
+	uint32_t o_fileid;	// file id
+	struct File *o_file;	// mapped descriptor for open file
+	int o_mode;		// open mode
+	struct Fd *o_fd;	// Fd page
+};
+int openfile_alloc(struct OpenFile **o);
+
 // Whiel implementing writeable FS
-uint32_t *bitmap;		// bitmap blocks mapped in memory 1= free, 0 = used
+uint32_t *bitmap; // bitmap blocks mapped in memory 1= free, 0 = used
 #define NBLOCKS  (super->s_nblocks)
-// <end> writeable FS declaration
+// Journalling
+struct OpenFile *jopenfile;
+struct File *jfile;
+#define TRUE		1
+#define FALSE		0
+#define NJBLKS		(2)
+#define JBLK_START 	(NBLOCKS -NJBLKS -1)
+#define FTYPE_JOURN	0x10
+#define MAXJBUFSIZE	512
+#define JFILE_NAME	".journal"
+#define JFILE_PATH	"/"JFILE_NAME
+#define JOURNAL_ISBINARY (FALSE)
+typedef enum {
+	JWRITE,
+	JREMOVE_FILE,
+	JBITMAP_CLEAR,
+	JBITMAP_SET,
+} jtype_t;
+
+typedef struct {
+	jtype_t	jtype;
+	union {
+		struct {
+			uintptr_t structFile;
+		} jwrite;
+		struct {
+			uintptr_t structFile;
+		} jremove_file;
+		struct {
+			uint64_t blockno;
+			uintptr_t structFile;
+		} jbitmap_clear;
+		struct {
+			uint64_t blockno;
+			uintptr_t structFile;
+		} jbitmap_set;
+	} args;
+} jrdwr_t;
+
+// <end> writeable FS declaration and journalling
 
 struct Super *super;		// superblock
 char *diskpos;
@@ -45,15 +93,15 @@ int	file_remove(const char *path);
 void	fs_sync(void);
 
 /* int	map_block(uint32_t); */
-bool	block_is_free(uint32_t blockno);
-uint32_t alloc_block(void);
+bool	is_block_free(uint32_t blockno);
+uint32_t alloc_block(struct File *f);
 
 /* test.c */
 void	fs_test(void);
 
 /* delcared for writeable FS */
-void bitmap_set_free (uint32_t blockno);
-void bitmap_clear_flag (uint32_t blockno);
+void bitmap_set_free (uint32_t blockno, struct File *);
+void bitmap_clear_flag (uint32_t blockno, struct File *f);
 uint32_t blockof(void *pos);
 uint32_t get_free_block (void);
 void bitmap_init (void);
@@ -68,3 +116,8 @@ static int
 dirent_create (struct File *dir, const char *name, uint32_t filetype,
 		struct File **newfile);
 int write_back (uint32_t blkno);
+
+/* Journal functions */
+int journal_add (jtype_t jtype, uintptr_t farg, uint64_t sarg);
+int journal_get_buf (jtype_t jtype, uintptr_t farg, uint64_t sarg, char **buf);
+int journal_init (void);
