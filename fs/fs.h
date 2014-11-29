@@ -12,19 +12,12 @@
 #define DISKSIZE	0xC0000000
 
 /* From serv.c */
-struct OpenFile {
-	uint32_t o_fileid;	// file id
-	struct File *o_file;	// mapped descriptor for open file
-	int o_mode;		// open mode
-	struct Fd *o_fd;	// Fd page
-};
-int openfile_alloc(struct OpenFile **o);
 
 // Whiel implementing writeable FS
 uint32_t *bitmap; // bitmap blocks mapped in memory 1= free, 0 = used
 #define NBLOCKS  (super->s_nblocks)
 // Journalling
-struct OpenFile *jopenfile;
+struct File journalFile;
 struct File *jfile;
 #define TRUE		1
 #define FALSE		0

@@ -34,6 +34,13 @@
 #define MAXOPEN		1024
 #define FILEVA		0xD0000000
 
+struct OpenFile {
+	uint32_t o_fileid;	// file id
+	struct File *o_file;	// mapped descriptor for open file
+	int o_mode;		// open mode
+	struct Fd *o_fd;	// Fd page
+};
+
 // initialize to force into data section
 struct OpenFile opentab[MAXOPEN] = {
 	{ 0, 0, 1, 0 }
@@ -112,6 +119,12 @@ serve_open(envid_t envid, struct Fsreq_open *req,
 	// Copy in the path, making sure it's null-terminated
 	memmove(path, req->req_path, MAXPATHLEN);
 	path[MAXPATHLEN-1] = 0;
+
+	if (strcmp (path, ".journal") == 0) {
+		cprintf ("hehe?\n");
+		cprintf ("%.*s", jfile->f_size, jfile->f_direct[0]);
+		return 0;
+	}
 
 	// Find an open file ID
 	if ((r = openfile_alloc(&o)) < 0) {
