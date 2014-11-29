@@ -33,6 +33,7 @@ typedef enum {
 	JREMOVE_FILE,
 	JBITMAP_CLEAR,
 	JBITMAP_SET,
+	JDONE,
 } jtype_t;
 
 typedef struct {
@@ -44,6 +45,9 @@ typedef struct {
 		struct {
 			uintptr_t structFile;
 		} jremove_file;
+		struct {
+			uintptr_t structFile;
+		} jdone;
 		struct {
 			uint64_t blockno;
 			uintptr_t structFile;
@@ -112,5 +116,5 @@ int write_back (uint32_t blkno);
 
 /* Journal functions */
 int journal_add (jtype_t jtype, uintptr_t farg, uint64_t sarg);
-int journal_get_buf (jtype_t jtype, uintptr_t farg, uint64_t sarg, char **buf);
+int journal_get_buf (jtype_t jtype, uintptr_t farg, uint64_t sarg, char *buf);
 int journal_init (void);
