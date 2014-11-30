@@ -109,9 +109,7 @@ int
 remove(const char *path)
 {
 	strcpy (fsipcbuf.remove.req_path, path);
-	int r = fsipc(FSREQ_REMOVE, NULL);
-	cprintf ("Here\n");
-	return r;
+	return fsipc(FSREQ_REMOVE, NULL);
 }
 
 // Flush the file descriptor.  After this the fileid is invalid.
