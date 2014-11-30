@@ -4,6 +4,8 @@
 
 #define debug 0
 
+int crash_testing = 0;
+#define CRASHFILEPATH "/crashfile"
 // --------------------------------------------------------------
 // Super block
 // --------------------------------------------------------------
@@ -45,7 +47,8 @@ fs_init(void)
 
 	bitmap_init ();
 
-	journal_init ();
+	if (journal_init () < 0)
+		cprintf ("Initializing journal failed\n");
 	//journal_checkand_repair ();
 }
 
@@ -317,6 +320,8 @@ file_write(struct File *f, const void *buf, size_t count, off_t offset)
 	min = MIN (count, PGSIZE - (offset%BLKSIZE));
 	memcpy (blk+ (offset % BLKSIZE), buf, min);
 	lcount += min;
+	//if ((r = journal_add(JWRITE, (uintptr_t)blk, 0)) < 0)
+		//cprintf ("Failed to journal the write\n");
 
 	/*
 	if (lcount < count) {
@@ -432,6 +437,9 @@ file_remove(const char *path)
 		return r;
 	}
 
+	if (f->f_type == FTYPE_DIR || f->f_type == FTYPE_JOURN)
+		return E_BAD_PATH;
+
 	if ((r = journal_add (JREMOVE_FILE, (uintptr_t)f, 0)) < 0)
 		cprintf ("Adding entry to journel failed\n");
 
@@ -441,7 +449,7 @@ file_remove(const char *path)
 		return r;
 	}
 
-	memset (&f, 0x00, sizeof (struct File));
+	memset (f, 0x00, sizeof (struct File));
 
 	if (journal_add (JDONE, (uintptr_t)f, 0) < 0)
 		cprintf ("Adding journal failed\n");
@@ -635,6 +643,9 @@ handle_ocreate (char *path, struct File **newfile)
 	struct File *dir = NULL;
 	struct File *f = NULL;
 
+	if (! strcmp (path, CRASHFILEPATH))
+		crash_testing = 1;
+
 	r = walk_path (path, &dir, &f, name);
 	if (r != -E_NOT_FOUND || dir == NULL) {
 		cprintf ("Error on walkpath @handle_ocreate\n");
@@ -734,6 +745,7 @@ journal_init (void)
 	jfile->f_type = FTYPE_JOURN;
 	strcpy (jfile->f_name, JFILE_NAME);
 	jfile->f_direct[NDIRECT -1] = 0;
+	jfile->f_direct[NDIRECT -2] = 0;
 
 	for (i =0; i <NJBLKS; i++) {
 		cprintf ("addr: %d\n", i+JBLK_START);

@@ -282,6 +282,21 @@ serve_flush(envid_t envid, struct Fsreq_flush *req)
 }
 
 int
+serve_remove(envid_t envid, union Fsipc *ipc)
+{
+	struct Fsreq_remove *req = &ipc->remove;
+	char path[MAXPATHLEN];
+
+	if (debug)
+		cprintf("serve_remove %08x %08x\n", envid, req->req_path);
+
+	strncpy (path, req->req_path, MAXPATHLEN);
+	path[MAXPATHLEN -1] = '\0';
+
+	return file_remove (path);
+}
+
+int
 serve_sync(envid_t envid, union Fsipc *req)
 {
 	fs_sync ();
@@ -301,6 +316,7 @@ fshandler handlers[] = {
 	[FSREQ_WRITE] = 	serve_write,
 	[FSREQ_TRUNC] = 	serve_trunc,
 	[FSREQ_SYNC] = 		serve_sync,
+	[FSREQ_REMOVE] = 	serve_remove,
 };
 #define NHANDLERS (sizeof(handlers)/sizeof(handlers[0]))
 
@@ -335,6 +351,7 @@ serve(void)
 			cprintf("Invalid request code %d from %08x\n", req, whom);
 			r = -E_INVAL;
 		}
+
 		ipc_send(whom, r, pg, perm);
 		sys_page_unmap(0, fsreq);
 	}

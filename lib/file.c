@@ -105,6 +105,15 @@ open(const char *path, int mode)
 	return fd2num (newFd);
 }
 
+int
+remove(const char *path)
+{
+	strcpy (fsipcbuf.remove.req_path, path);
+	int r = fsipc(FSREQ_REMOVE, NULL);
+	cprintf ("Here\n");
+	return r;
+}
+
 // Flush the file descriptor.  After this the fileid is invalid.
 //
 // This function is called by fd_close.  fd_close will take care of

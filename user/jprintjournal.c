@@ -125,6 +125,10 @@ umain(int argc, char **argv)
 	close(f);
 	cprintf("large file is good\n");
 
+	if (remove("/big") < 0)
+		panic ("Remove failed\n");
+
+
 	int rfd = -1;
 	int n = 0;
 
