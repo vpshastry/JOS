@@ -317,8 +317,6 @@ file_write(struct File *f, const void *buf, size_t count, off_t offset)
 	min = MIN (count, PGSIZE - (offset%BLKSIZE));
 	memcpy (blk+ (offset % BLKSIZE), buf, min);
 	lcount += min;
-	//if ((r = journal_add(JWRITE, (uintptr_t)blk, 0)) < 0)
-		//cprintf ("Failed to journal the write\n");
 
 	/*
 	if (lcount < count) {
@@ -577,66 +575,7 @@ bitmap_init (void)
 	for (i = 0; i < nbitblocks; i++)
 		bitmap_clear_flag (2+i, NULL);
 }
-/*
-int
-skip_to_curdir (char *pathtmp, struct File **pdir, struct File **pf,
-		char **ptr)
-{
-	char *p;
-	char name[MAXNAMELEN];
-	struct File *dir, *f;
-	int r;
-	char lpath[MAXPATHLEN];
-	char *path = lpath;
 
-	strcpy (path, pathtmp);
-
-	// if (*path != '/')
-	//	return -E_BAD_PATH;
-	path = my_skip_slash(path);
-	f = &super->s_root;
-	dir = 0;
-	name[0] = 0;
-
-	if (pdir)
-		*pdir = 0;
-	if (pf)
-		*pf = 0;
-
-	while (*path != '\0') {
-		dir = f;
-		p = path;
-		while (*path != '/' && *path != '\0')
-			path++;
-		if (path - p >= MAXNAMELEN)
-			return -E_BAD_PATH;
-		memmove(name, p, path - p);
-		name[path - p] = '\0';
-		path = my_skip_slash(path);
-
-		if (dir->f_type != FTYPE_DIR)
-			return -E_NOT_FOUND;
-
-		if ((r = dir_lookup(dir, name, &f)) < 0) {
-			if (r == -E_NOT_FOUND) {
-				if (pdir)
-					*pdir = dir;
-				if (ptr)
-					*ptr = my_skip_slash (p);
-				if (pf)
-					*pf = 0;
-				r = 0;
-			}
-			return r;
-		}
-	}
-
-	if (pdir)
-		*pdir = dir;
-	*pf = f;
-	return 0;
-}
-*/
 int
 handle_otrunc (struct File *f, size_t n)
 {
@@ -710,54 +649,6 @@ handle_ocreate (char *path, struct File **newfile)
 
 	return 0;
 }
-/*
-{
-	int r = 0;
-	char *ptr = NULL;
-	const char *p = NULL;
-	struct File *lcurdir = *curdir;
-	char creatFile[MAXNAMELEN];
-	struct File *newfile;
-
-	if (debug)
-		cprintf ("handle_ocreate: path: %s\n", path);
-
-	// not asking to create a file
-	if (path [strlen (path) - 1] == '/')
-		return -E_BAD_PATH;
-
-	r = skip_to_curdir (path, &lcurdir, 0, &ptr);
-	if (r < 0) {
-		cprintf ("\nskip to dir failed @handle_ocreate: %e\n", r);
-		return r;
-	}
-
-	while (*ptr != '\0') {
-		p = ptr;
-		while (*ptr != '/' && *ptr != '\0')
-			ptr ++;
-
-		if (ptr - p >= MAXNAMELEN)
-			return -E_BAD_PATH;
-
-		memcpy (creatFile, p, ptr-p);
-		creatFile[ptr-p] = '\0';
-
-		if (*ptr == '\0') {
-			dirent_create (lcurdir, creatFile, FTYPE_REG, &newfile);
-			break;
-		} else {
-			dirent_create (lcurdir, creatFile, FTYPE_DIR, &newfile);
-		}
-		lcurdir = newfile;
-	}
-
-	*curdir = newfile;
-	if (debug)
-		cprintf ("curdir: %s\n", (*curdir)->f_name);
-	return 0;
-}
-*/
 
 // Similar to dir_lookup, just looks for ""
 int
@@ -988,8 +879,6 @@ journal_file_write(struct File *f, const void *buf, size_t count,
 	min = MIN (count, PGSIZE - (offset%BLKSIZE));
 	memcpy (blk+ (offset % BLKSIZE), buf, min);
 	lcount += min;
-	//if ((r = journal_add(JWRITE, (uintptr_t)blk, 0)) < 0)
-		//cprintf ("Failed to journal the write\n");
 
 	if (lcount < count) {
 		r = journal_file_get_block (f, blockno+1, &blk);
@@ -1003,21 +892,6 @@ journal_file_write(struct File *f, const void *buf, size_t count,
 		lcount += min;
 		f->f_size += lcount;
 	}
-	/*
-	for (i = 1; lcount < count; i++) {
-		r = journal_file_get_block (f, blockno + i, &blk);
-		if (r < 0) {
-			cprintf ("get block failed: %e\n", r);
-			break;
-		}
-
-		min = MIN (count, PGSIZE);
-		memcpy (blk, buf + lcount, min);
-		lcount += min;
-		//if ((r = journal_add(JWRITE, (uintptr_t)blk, 0)) < 0)
-			//cprintf ("Failed to journal the write\n");
-	}
-	*/
 
 	/*
 	if ((r = file_set_size (f, MAX(offset + lcount, f->f_size))) < 0)
