@@ -150,7 +150,7 @@ serve_open(envid_t envid, struct Fsreq_open *req,
 		}
 
 		if (debug)
-			cprintf ("Creating new file: %s\n", f->f_name);
+			cprintf ("Creating new file: %s\n", path);
 
 		r = handle_ocreate (path, &f);
 		if (r < 0) {
