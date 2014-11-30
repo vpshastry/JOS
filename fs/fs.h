@@ -28,6 +28,7 @@ struct File *jfile;
 #define JFILE_NAME	".journal"
 #define JFILE_PATH	"/"JFILE_NAME
 #define JOURNAL_ISBINARY (FALSE)
+#define E_NEEDS_SCANNING -2
 typedef enum {
 	JWRITE,
 	JREMOVE_FILE,
@@ -118,3 +119,6 @@ int write_back (uint32_t blkno);
 int journal_add (jtype_t jtype, uintptr_t farg, uint64_t sarg);
 int journal_get_buf (jtype_t jtype, uintptr_t farg, uint64_t sarg, char *buf);
 int journal_init (void);
+int journal_scan_and_recover (void);
+int journal_file_write(struct File *f, const void *buf, size_t count,
+			off_t offset);

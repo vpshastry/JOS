@@ -32,6 +32,7 @@ void
 fs_init(void)
 {
 	static_assert(sizeof(struct File) == 256);
+	int r = 0;
 
 	// Find a JOS disk.  Use the second IDE disk (number 1) if available.
 	if (ide_probe_disk1())
@@ -47,8 +48,12 @@ fs_init(void)
 
 	bitmap_init ();
 
-	if (journal_init () < 0)
-		cprintf ("Initializing journal failed\n");
+	if ((r = journal_init ()) < 0) {
+		if (r != E_NEEDS_SCANNING)
+			cprintf ("Initializing journal failed\n");
+
+		journal_scan_and_recover ();
+	}
 	//journal_checkand_repair ();
 }
 
@@ -107,6 +112,7 @@ out:
 	if (alloc && ((**ppdiskbno) == 0))
 		**ppdiskbno = alloc_block (f);
 
+	//cprintf ("Fbno: %d, disk b no: %d\n", filebno, **ppdiskbno);
 	return 0;
 }
 
@@ -356,6 +362,7 @@ file_write(struct File *f, const void *buf, size_t count, off_t offset)
 	if (journal_add (JDONE, (uintptr_t)f, 0) < 0)
 		cprintf ("Adding journal failed\n");
 
+	//cprintf ("returning\n");
 	return lcount;
 }
 
@@ -736,6 +743,8 @@ journal_init (void)
 {
 	int r = 0;
 	int i = 0;
+	uint64_t start = super->jstart;
+	uint64_t end = super->jend;
 	jfile = &journalFile;
 
 	if (handle_ocreate (JFILE_PATH, &jfile) < 0)
@@ -744,14 +753,14 @@ journal_init (void)
 	jfile->f_size = NJBLKS *BLKSIZE;
 	jfile->f_type = FTYPE_JOURN;
 	strcpy (jfile->f_name, JFILE_NAME);
-	jfile->f_direct[NDIRECT -1] = 0;
-	jfile->f_direct[NDIRECT -2] = 0;
 
 	for (i =0; i <NJBLKS; i++) {
-		cprintf ("addr: %d\n", i+JBLK_START);
 		bitmap_clear_flag (i +JBLK_START, jfile);
 		jfile->f_direct[i] = (i +JBLK_START);
 	}
+
+	if (start != 0 || end != 0)
+		return E_NEEDS_SCANNING;
 
 	return 0;
 }
@@ -905,8 +914,9 @@ journal_file_write(struct File *f, const void *buf, size_t count,
 		f->f_size += lcount;
 	}
 
+	//cprintf ("jfile size: %d\n", jfile->f_size);
 	/*
-	if ((r = file_set_size (f, MAX(offset + lcount, f->f_size))) < 0)
+	   if ((r = file_set_size (f, MAX(offset + lcount, f->f_size))) < 0)
 		cprintf ("failed to set size\n");
 		*/
 	return lcount;
@@ -919,37 +929,42 @@ journal_add (jtype_t jtype, uintptr_t farg, uint64_t sarg)
 	int r = 0;
 	int i = 0;
 	char buf[512];
+	uint64_t *start = &super->jstart;
+	uint64_t *end = &super->jend;
 
 	if (((struct File *)farg)->f_type == FTYPE_JOURN)
 		return 0;
 
+	//cprintf ("before get buf\n");
 	if ((r = journal_get_buf (jtype, farg, sarg, buf)) < 0) {
 		cprintf ("Failed to fill the buf\n");
 		return r;
 	}
 
-	r = journal_file_write (jfile, (void *)buf, r,
-					jfile->f_direct[NDIRECT-1]);
+	r = journal_file_write (jfile, (void *)buf, r, *end);
 	if (r < 0) {
 		cprintf ("Failed to add entry to journal: %e\n", r);
 		return r;
 	}
 
-	jfile->f_direct[NDIRECT-1] = (jfile->f_direct[NDIRECT -1] +r)
-					%(NJBLKS *PGSIZE);
+	if (*end >= (NJBLKS -1)*PGSIZE)
+		*end = 0;
+	else
+		*end += r;
+
+	if (*start >= *end && *start <= *end +r)
+		*start = *end +r;
 
 	write_back (blockof ((void *)jfile));
-	//write_back (jfile->f_direct[NDIRECT -1]);
+	write_back (1);
 	for (i =0; i <NJBLKS; i++)
 		write_back (jfile->f_direct[i]);
 
 	return 0;
 }
 
-/*
 int
-journal_checkand_repair ()
+journal_scan_and_recover()
 {
-	while
+	panic ("not yet implemetned");
 }
-*/
