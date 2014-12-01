@@ -23,6 +23,7 @@ struct File *jfile;
 #define FALSE		0
 #define NJBLKS		(2)
 #define JBLK_START 	(NBLOCKS -NJBLKS -1)
+#define JBSTART_ADDR	(BLKSIZE *JBLK_START)
 #define FTYPE_JOURN	0x10
 #define MAXJBUFSIZE	512
 #define JFILE_NAME	".journal"
@@ -122,3 +123,6 @@ int journal_init (void);
 int journal_scan_and_recover (void);
 int journal_file_write(struct File *f, const void *buf, size_t count,
 			off_t offset);
+struct File * journal_get_fp (jrdwr_t *jentry);
+int journal_check_matching_done (int idx, int *array, jrdwr_t *jarray, int end, bool *skip_array);
+int journal_recover_file (int *array, int len, jrdwr_t *jarray);

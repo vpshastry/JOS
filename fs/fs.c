@@ -532,6 +532,11 @@ bitmap_clear_flag (uint32_t blockno, struct File *f)
 
 	if (journal_add(JBITMAP_CLEAR, (uintptr_t)f, (uint64_t)blockno) <0)
 		cprintf ("Failed to add to journal\n");
+
+	if (crash_testing) {
+		crash_testing = 0;
+		panic ("Crash testing\n");
+	}
 }
 
 bool
@@ -956,7 +961,7 @@ journal_add (jtype_t jtype, uintptr_t farg, uint64_t sarg)
 		*start = *end +r;
 
 	write_back (blockof ((void *)jfile));
-	write_back (1);
+	write_back (1); // We store start and end in superblock so sync
 	for (i =0; i <NJBLKS; i++)
 		write_back (jfile->f_direct[i]);
 
@@ -966,5 +971,98 @@ journal_add (jtype_t jtype, uintptr_t farg, uint64_t sarg)
 int
 journal_scan_and_recover()
 {
-	panic ("not yet implemetned");
+	if (!super->jstart && !super->jend)
+		return 0;
+
+	uint64_t *start = &super->jstart;
+	uint64_t *end = &super->jend;
+	char bufcopy[NJBLKS *PGSIZE];
+	jrdwr_t *jarray = (jrdwr_t *) bufcopy;
+	int len = 0;
+	int i = 0;
+	int r = 0;
+	bool skip_array[(NJBLKS *BLKSIZE)/sizeof (jrdwr_t)] = {0,};
+
+	if (*start >= *end) {
+		len = (((NJBLKS *BLKSIZE) +JBSTART_ADDR) - *start);
+		memcpy (bufcopy, start, len);
+		memcpy ((void *)(bufcopy +len),
+				(void *)((uint64_t)JBSTART_ADDR), *end);
+		len += *end;
+	} else {
+		len = *end;
+		memcpy (bufcopy, start, *end - *start);
+	}
+
+	int array[len];
+
+	for (i = 0; i < (len / sizeof (jrdwr_t)); i++) {
+		if (skip_array[i])
+			continue;
+
+		if (jarray[i].jtype == JDONE)
+			continue;
+
+		if ((r = journal_check_matching_done (i, array, jarray, len,
+							skip_array)) < 0)
+			journal_recover_file (array, -r, jarray);
+	}
+	//panic ("not yet implemetned");
+	return 0;
+}
+
+int
+journal_recover_file (int *array, int len, jrdwr_t *jarray)
+{
+	int i = 0;
+
+	for (i = 0; i < len; i++) {
+		switch (jarray[array[i]].jtype) {
+		case JREMOVE_FILE:
+		case JBITMAP_SET:
+		case JBITMAP_CLEAR:
+			cprintf ("I'm yet to be implemented\n");
+		default:
+			cprintf ("Don't know dude\n");
+		}
+	}
+	return 0;
+}
+
+int
+journal_check_matching_done (int idx, int *array, jrdwr_t *jarray, int end,
+				bool *skip_array)
+{
+	struct File *f = journal_get_fp (&jarray[idx]);
+	int i = 0;
+	int k = 0;
+
+	for (i = idx; i < end; i++) {
+		if (f != journal_get_fp(&jarray[i]))
+			continue;
+
+		if (jarray[i].jtype == JDONE)
+			return 0;
+		else
+			skip_array[i] = true, array[k++] = i;
+	}
+	return -k;
+}
+
+struct File *
+journal_get_fp (jrdwr_t *jentry)
+{
+	switch (jentry->jtype) {
+	case JWRITE:
+		return (struct File *) jentry->args.jwrite.structFile;
+	case JREMOVE_FILE:
+		return (struct File *) jentry->args.jremove_file.structFile;
+	case JBITMAP_SET:
+		return (struct File *) jentry->args.jbitmap_set.structFile;
+	case JBITMAP_CLEAR:
+		return (struct File *) jentry->args.jbitmap_clear.structFile;
+	default:
+		cprintf ("I don't know how to resolve this\n");
+	}
+	return 0;
 }
