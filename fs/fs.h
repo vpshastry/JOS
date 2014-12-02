@@ -59,6 +59,7 @@ typedef struct {
 			uintptr_t structFile;
 		} jbitmap_set;
 	} args;
+	char filltopowerof2[64 - (sizeof(jtype_t) +sizeof (args))];
 } jrdwr_t;
 
 // <end> writeable FS declaration and journalling
