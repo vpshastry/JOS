@@ -17,7 +17,6 @@
 uint32_t *bitmap; // bitmap blocks mapped in memory 1= free, 0 = used
 #define NBLOCKS  (super->s_nblocks)
 // Journalling
-struct File journalFile;
 struct File *jfile;
 #define TRUE		1
 #define FALSE		0
@@ -38,28 +37,30 @@ typedef enum {
 	JDONE,
 } jtype_t;
 
+typedef union {
+	struct {
+		uintptr_t structFile;
+	} jwrite;
+	struct {
+		uintptr_t structFile;
+	} jremove_file;
+	struct {
+		uintptr_t structFile;
+	} jdone;
+	struct {
+		uint64_t blockno;
+		uintptr_t structFile;
+	} jbitmap_clear;
+	struct {
+		uint64_t blockno;
+		uintptr_t structFile;
+	} jbitmap_set;
+} jargs_t;
+
 typedef struct {
 	jtype_t	jtype;
-	union {
-		struct {
-			uintptr_t structFile;
-		} jwrite;
-		struct {
-			uintptr_t structFile;
-		} jremove_file;
-		struct {
-			uintptr_t structFile;
-		} jdone;
-		struct {
-			uint64_t blockno;
-			uintptr_t structFile;
-		} jbitmap_clear;
-		struct {
-			uint64_t blockno;
-			uintptr_t structFile;
-		} jbitmap_set;
-	} args;
-	char filltopowerof2[64 - (sizeof(jtype_t) +sizeof (args))];
+	jargs_t args;
+	char filltopowerof2[32 - (sizeof(jtype_t) +sizeof (jargs_t))];
 } jrdwr_t;
 
 // <end> writeable FS declaration and journalling

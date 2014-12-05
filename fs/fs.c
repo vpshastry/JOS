@@ -750,7 +750,7 @@ journal_init (void)
 	int i = 0;
 	uint64_t start = super->jstart;
 	uint64_t end = super->jend;
-	jfile = &journalFile;
+	jfile = &super->journalFile;
 
 	if (handle_ocreate (JFILE_PATH, &jfile) < 0)
 		panic ("Failed to create journal file\n");
@@ -957,7 +957,7 @@ journal_add (jtype_t jtype, uintptr_t farg, uint64_t sarg)
 	else
 		*end += r;
 
-	if (*start >= *end && *start <= *end +r)
+	if (*start >= *end && *start <= (*end +r))
 		*start = *end +r;
 
 	write_back (blockof ((void *)jfile));
@@ -976,6 +976,7 @@ journal_scan_and_recover()
 
 	uint64_t *start = &super->jstart;
 	uint64_t *end = &super->jend;
+	// Is a copy of the journal file (separate buf to access it continuously
 	char bufcopy[NJBLKS *PGSIZE];
 	jrdwr_t *jarray = (jrdwr_t *) bufcopy;
 	int len = 0;
@@ -994,6 +995,8 @@ journal_scan_and_recover()
 		memcpy (bufcopy, start, *end - *start);
 	}
 
+	// Used to store the index of the entry that are related to file
+	// that needs recovery
 	int array[len];
 
 	for (i = 0; i < (len / sizeof (jrdwr_t)); i++) {
