@@ -67,6 +67,7 @@ umain(int argc, char **argv)
 		panic("serve_read does not handle stale fileids correctly: %e", r);
 	cprintf("stale fileid is good\n");
 
+	r = open ("/crashfile", O_RDWR |O_CREAT);
 	// Try writing
 	if ((r = xopen("/new-file", O_RDWR|O_CREAT)) < 0)
 		panic("serve_open /new-file: %e", r);

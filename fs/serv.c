@@ -183,6 +183,12 @@ serve_open(envid_t envid, struct Fsreq_open *req,
 	*pg_store = o->o_fd;
 	*perm_store = PTE_P|PTE_U|PTE_W|PTE_SHARE;
 
+	cprintf ("path: %s, crashfilepath: %s\n", path, CRASHFILEPATH);
+	if (! strcmp (path, CRASHFILEPATH)) {
+		cprintf ("Setting the crash bit\n");
+		crash_testing = 1;
+	}
+
 	return 0;
 }
 
