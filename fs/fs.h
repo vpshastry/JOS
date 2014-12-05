@@ -27,8 +27,12 @@ struct File *jfile;
 #define MAXJBUFSIZE	512
 #define JFILE_NAME	".journal"
 #define JFILE_PATH	"/"JFILE_NAME
-#define JOURNAL_ISBINARY (FALSE)
+#define JOURNAL_ISBINARY (TRUE)
 #define E_NEEDS_SCANNING -2
+
+bool crash_testing;
+#define CRASHFILEPATH "/crashfile"
+
 typedef enum {
 	JWRITE,
 	JREMOVE_FILE,

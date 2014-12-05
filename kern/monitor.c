@@ -14,6 +14,9 @@
 #include <kern/dwarf_api.h>
 #include <kern/trap.h>
 
+#include <kern/sched.h>
+#include <kern/env.h>
+
 #define CMDBUF_SIZE	80	// enough for one VGA text line
 
 
@@ -28,6 +31,7 @@ static struct Command commands[] = {
 	{ "help", "Display this list of commands", mon_help },
 	{ "kerninfo", "Display information about the kernel", mon_kerninfo },
 	{ "backtrace", "Display the backtrace of the function", mon_backtrace },
+	{ "restartFS", "Restart the FS", mon_restartFS},
 };
 #define NCOMMANDS (sizeof(commands)/sizeof(commands[0]))
 
@@ -56,6 +60,17 @@ mon_kerninfo(int argc, char **argv, struct Trapframe *tf)
 	cprintf("  end    %08x (virt)  %08x (phys)\n", end, end - KERNBASE);
 	cprintf("Kernel executable memory footprint: %dKB\n",
 		ROUNDUP(end - entry, 1024) / 1024);
+	return 0;
+}
+
+int
+mon_restartFS(int argc, char **argv, struct Trapframe *tf)
+{
+	cprintf ("Restarting FS\n");
+	ENV_CREATE(fs_fs, ENV_TYPE_FS);
+	cprintf ("Restarting FS done.\n");
+	ENV_CREATE(user_writemotd, ENV_TYPE_USER);
+	sched_yield();
 	return 0;
 }
 

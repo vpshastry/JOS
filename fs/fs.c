@@ -4,8 +4,6 @@
 
 #define debug 0
 
-int crash_testing = 0;
-#define CRASHFILEPATH "/crashfile"
 // --------------------------------------------------------------
 // Super block
 // --------------------------------------------------------------
@@ -31,6 +29,7 @@ check_super(void)
 void
 fs_init(void)
 {
+	cprintf ("Starting FS\n");
 	static_assert(sizeof(struct File) == 256);
 	int r = 0;
 
@@ -655,9 +654,6 @@ handle_ocreate (char *path, struct File **newfile)
 	struct File *dir = NULL;
 	struct File *f = NULL;
 
-	if (! strcmp (path, CRASHFILEPATH))
-		crash_testing = 1;
-
 	r = walk_path (path, &dir, &f, name);
 	if (r != -E_NOT_FOUND || dir == NULL) {
 		cprintf ("Error on walkpath @handle_ocreate\n");
@@ -751,6 +747,7 @@ journal_init (void)
 	uint64_t start = super->jstart;
 	uint64_t end = super->jend;
 	jfile = &super->journalFile;
+	crash_testing = 0;
 
 	if (handle_ocreate (JFILE_PATH, &jfile) < 0)
 		panic ("Failed to create journal file\n");
@@ -964,6 +961,12 @@ journal_add (jtype_t jtype, uintptr_t farg, uint64_t sarg)
 	write_back (1); // We store start and end in superblock so sync
 	for (i =0; i <NJBLKS; i++)
 		write_back (jfile->f_direct[i]);
+
+	//cprintf ("Crash: %d\n", crash_testing);
+	if (crash_testing) {
+		crash_testing = 0;
+		panic ("Testing the crash recovery functionality\n");
+	}
 
 	return 0;
 }
