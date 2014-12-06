@@ -66,8 +66,8 @@ mon_kerninfo(int argc, char **argv, struct Trapframe *tf)
 int
 mon_restartFS(int argc, char **argv, struct Trapframe *tf)
 {
+	ENV_CREATE(user_jafterremf, ENV_TYPE_USER);
 	ENV_CREATE(fs_fs, ENV_TYPE_FS);
-	ENV_CREATE(user_writemotd, ENV_TYPE_USER);
 	sched_yield();
 	return 0;
 }

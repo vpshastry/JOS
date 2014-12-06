@@ -45,14 +45,17 @@ fs_init(void)
 	super = diskaddr(1);
 	check_super();
 
-	bitmap_init ();
+	//if (strcmp (super->journalFile.f_name, JFILE_NAME))
+		bitmap_init ();
 
 	if ((r = journal_init ()) < 0) {
-		if (r != E_NEEDS_SCANNING)
+		if (r != -E_NEEDS_SCANNING)
 			cprintf ("Initializing journal failed\n");
 
 		cprintf ("Trying to recover the old state\n");
-		journal_scan_and_recover ();
+		if ((r = journal_scan_and_recover ()) < 0) {
+			cprintf ("Failed to recover\n");
+		}
 	}
 }
 
@@ -331,7 +334,6 @@ file_write(struct File *f, const void *buf, size_t count, off_t offset)
 	lcount += min;
 	//if ((r = journal_add(JWRITE, (uintptr_t)blk, 0)) < 0)
 		//cprintf ("Failed to journal the write\n");
-
 	/*
 	if (lcount < count) {
 		r = file_get_block (f, blockno+1, &blk);
@@ -394,7 +396,7 @@ file_flush (struct File *f)
 
 	for (i= 0; i < NDIRECT; i++) {
 		if (!f->f_direct[i])
-			return;
+			continue;
 
 		r = write_back (f->f_direct[i]);
 		if (r < 0) {
@@ -410,7 +412,7 @@ file_flush (struct File *f)
 
 	for (i=0; i < NINDIRECT; i++) {
 		if (!ib_addr[i])
-			break;
+			continue;
 
 		r = write_back (ib_addr[i]);
 		if (r < 0) {
@@ -453,6 +455,9 @@ file_remove(const char *path)
 	if (f->f_type == FTYPE_DIR || f->f_type == FTYPE_JOURN)
 		return E_BAD_PATH;
 
+	if ((r = journal_add (JSTART, (uintptr_t)f, 0)) < 0)
+		cprintf ("Adding entry to journel failed\n");
+
 	if ((r = journal_add (JREMOVE_FILE, (uintptr_t)f, 0)) < 0)
 		cprintf ("Adding entry to journel failed\n");
 
@@ -462,24 +467,29 @@ file_remove(const char *path)
 		return r;
 	}
 
-	memset (f, 0x00, sizeof (struct File));
-
 	if (journal_add (JDONE, (uintptr_t)f, 0) < 0)
 		cprintf ("Adding journal failed\n");
+
+	memset (f, 0x00, sizeof (struct File));
 
 	return 0;
 }
 
 // While implementing writeable FS - team defined prototypes
 bool
-page_is_dirty (char *addr)
+page_is_present (void *addr)
 {
-	if (!((uvpml4e[VPML4E(addr)] & (uint64_t)PTE_P) &&
+	return (((uvpml4e[VPML4E(addr)] & (uint64_t)PTE_P) &&
 		(uvpde[VPDPE(addr)] & (uint64_t)PTE_P) &&
 		(uvpd[VPD(addr)] & (uint64_t)PTE_P) &&
-		(uvpt [PGNUM(addr)] & (uint64_t)PTE_P)))
+		(uvpt [PGNUM(addr)] & (uint64_t)PTE_P)));
+}
 
-		if (uvpt[PGNUM(addr)] & (uint64_t)PTE_D)
+bool
+page_is_dirty (void *addr)
+{
+	if (page_is_present (addr))
+		if ((uvpt[PGNUM(addr)] & PTE_D) != 0)
 			return 1;
 
 	return 0;
@@ -491,13 +501,15 @@ write_back (uint32_t blkno)
 	uint32_t secstart = blkno * BLKSECTS;
 	char *addrstart = diskaddr ((uint64_t)blkno);
 	int r = 0;
+	int k = 0;
 
 	if (page_is_dirty(addrstart)) {
-		cprintf ("#############before ide write##########\n");
-		r = ide_write (secstart, (void *)addrstart, 4);
-		if (r < 0) {
-			cprintf ("IDE write failed\n");
-			return r;
+		for (k =0; k <BLKSECTS; k++, secstart += SECTSIZE) {
+			r = ide_write (secstart, (void *)addrstart, 1);
+			if (r < 0) {
+				cprintf ("IDE write failed\n");
+				return r;
+			}
 		}
 		mark_page_UNdirty (addrstart);
 	}
@@ -605,6 +617,8 @@ check_bitmap(void)
 void
 bitmap_init (void)
 {
+	bitmap = (uint32_t *)(DISKMAP + (PGSIZE *2));
+	return;
 	int nbitblocks;
 	int i;
 
@@ -620,7 +634,7 @@ bitmap_init (void)
 	for (i = 0; i < nbitblocks; i++)
 		bitmap_clear_flag (2+i, NULL);
 
-	check_bitmap();
+	//check_bitmap();
 }
 
 int
@@ -729,11 +743,13 @@ get_free_dirent (struct File *dir, struct File **file, char **block)
 void
 mark_page_UNdirty (char *pg)
 {
+	return;
 	// TODO: Check whether this is correct
-	uint64_t perm = uvpt[PGNUM(pg)] & PTE_SYSCALL;
+	int perm = uvpt[PGNUM(pg)] & PTE_SYSCALL;
 	int	r = 0;
 	// Remove dirty flag
-	perm &= ~((uint64_t)PTE_D);
+	//perm &= ~((uint64_t)PTE_D);
+	//int perm = PTE_SYSCALL;	
 
 	r = sys_page_map (0, (void *)pg, 0, (void *)pg, perm);
 	if (r < 0)
@@ -763,6 +779,8 @@ dirent_create (struct File *dir, const char *name, uint32_t filetype,
 	(*newfile)->f_size = 0;
 	(*newfile)->f_type = filetype;
 
+	//cprintf ("blockof: %d\n", blockof (*newfile));
+	write_back (blockof(*newfile));
 	return 0;
 }
 
@@ -777,6 +795,8 @@ journal_init (void)
 	jfile = &super->journalFile;
 	crash_testing = 0;
 
+	if (!strcmp (super->journalFile.f_name, JFILE_NAME))
+		cprintf ("$@##@$T&@#$*&#$&T*&#*&^#@$*&^#Persists\n");
 	jfile->f_size = NJBLKS *BLKSIZE;
 	jfile->f_type = FTYPE_JOURN;
 	strcpy (jfile->f_name, JFILE_NAME);
@@ -794,35 +814,39 @@ journal_init (void)
 }
 
 int
-journal_get_buf (jtype_t jtype, uintptr_t farg, uint64_t sarg, char *buf)
+journal_get_buf (jtype_t jtype, uintptr_t farg, uint64_t sarg, char *buf, int *ref)
 {
 	jrdwr_t j;
 
 	switch (jtype) {
 	case JBITMAP_SET:
 		j.jtype = jtype;
-		j.args.jbitmap_set.blockno = (uint64_t)farg;
-		j.args.jbitmap_set.structFile = (uintptr_t)sarg;
+		j.jref = (((struct File *)farg)->jref);
+		j.args.jbitmap_set.structFile = (uintptr_t)farg;
+		j.args.jbitmap_set.blockno = (uint64_t)sarg;
 
 		if (JOURNAL_ISBINARY)
 			goto jbinary;
 
-		snprintf (buf, MAXJBUFSIZE, "%d:%d:%x\n", j.jtype,
-				j.args.jbitmap_set.blockno,
-				j.args.jbitmap_set.structFile);
+		snprintf (buf, MAXJBUFSIZE, "%d:%u:%x:%d\n", j.jtype, j.jref,
+				j.args.jbitmap_set.structFile,
+				j.args.jbitmap_set.blockno);
+		*ref = j.jref;
 		return strlen (buf);
 
 	case JBITMAP_CLEAR:
 		j.jtype = jtype;
-		j.args.jbitmap_clear.blockno = (uint64_t)farg;
-		j.args.jbitmap_clear.structFile = (uintptr_t)sarg;
+		j.jref = (((struct File *)farg)->jref);
+		j.args.jbitmap_clear.structFile = (uintptr_t)farg;
+		j.args.jbitmap_clear.blockno = (uint64_t)sarg;
 
 		if (JOURNAL_ISBINARY)
 			goto jbinary;
 
-		snprintf (buf, MAXJBUFSIZE, "%d:%d:%x\n", j.jtype,
-				j.args.jbitmap_clear.blockno,
-				j.args.jbitmap_clear.structFile);
+		snprintf (buf, MAXJBUFSIZE, "%d:%u:%x:%d\n", j.jtype, j.jref,
+				j.args.jbitmap_clear.structFile,
+				j.args.jbitmap_clear.blockno);
+		*ref = j.jref;
 		return strlen (buf);
 
 	case JSTART:
@@ -833,21 +857,24 @@ journal_get_buf (jtype_t jtype, uintptr_t farg, uint64_t sarg, char *buf)
 		if (JOURNAL_ISBINARY)
 			goto jbinary;
 
-		snprintf (buf, MAXJBUFSIZE, "%d:%x\n", j.jtype,
+		snprintf (buf, MAXJBUFSIZE, "%d:%u:%x\n", j.jtype, j.jref,
 				j.args.jstart.structFile);
 
+		*ref = j.jref;
 		return strlen (buf);
 
 	case JREMOVE_FILE:
 		j.jtype = jtype;
+		j.jref = (((struct File *)farg)->jref);
 		j.args.jremove_file.structFile = (uintptr_t)farg;
 
 		if (JOURNAL_ISBINARY)
 			goto jbinary;
 
-		snprintf (buf, MAXJBUFSIZE, "%d:%x\n", j.jtype,
+		snprintf (buf, MAXJBUFSIZE, "%d:%u:%x\n", j.jtype, j.jref,
 				j.args.jremove_file.structFile);
 
+		*ref = j.jref;
 		return strlen (buf);
 
 	case JDONE:
@@ -858,9 +885,10 @@ journal_get_buf (jtype_t jtype, uintptr_t farg, uint64_t sarg, char *buf)
 		if (JOURNAL_ISBINARY)
 			goto jbinary;
 
-		snprintf (buf, MAXJBUFSIZE, "%d:%x\n", j.jtype,
+		snprintf (buf, MAXJBUFSIZE, "%d:%u:%x\n", j.jtype, j.jref,
 				j.args.jdone.structFile);
 
+		*ref = j.jref;
 		return strlen (buf);
 
 	default:
@@ -871,6 +899,7 @@ journal_get_buf (jtype_t jtype, uintptr_t farg, uint64_t sarg, char *buf)
 
 jbinary:
 	memcpy (buf, (void *)&j, sizeof (j));
+	*ref = j.jref;
 	return sizeof j;
 }
 
@@ -961,15 +990,17 @@ journal_add (jtype_t jtype, uintptr_t farg, uint64_t sarg)
 	char buf[512];
 	uint64_t *start = &super->jstart;
 	uint64_t *end = &super->jend;
+	int ref =0;
 
 	if (((struct File *)farg)->f_type == FTYPE_JOURN)
 		return 0;
 
 	//cprintf ("before get buf\n");
-	if ((r = journal_get_buf (jtype, farg, sarg, buf)) < 0) {
+	if ((r = journal_get_buf (jtype, farg, sarg, buf, &ref)) < 0) {
 		cprintf ("Failed to fill the buf\n");
 		return r;
 	}
+	//cprintf ("name: %s, buf: %s\n", ((struct File *)farg)->f_name, buf);
 
 	r = journal_file_write (jfile, (void *)buf, r, *end);
 	if (r < 0) {
@@ -985,7 +1016,12 @@ journal_add (jtype_t jtype, uintptr_t farg, uint64_t sarg)
 	if (*start >= *end && *start <= (*end +r))
 		*start = *end +r;
 
-	if (jtype == JDONE) {
+	if (jtype == JDONE && ref == 0) {
+		if (!JOURNAL_ISBINARY) {
+			strcpy (buf, "CheckPointing\n");
+			r = journal_file_write (jfile, (void *)buf, strlen("CheckPointing\n"), *end);
+			*end += r;
+		}
 		fs_sync ();
 	} else {
 		write_back (blockof ((void *)jfile));
@@ -1000,19 +1036,13 @@ journal_add (jtype_t jtype, uintptr_t farg, uint64_t sarg)
 		panic ("Testing the crash recovery functionality\n");
 	}
 
-	//cprintf ("Crash: %d\n", crash_testing);
-	if (crash_testing) {
-		crash_testing = 0;
-		panic ("Testing the crash recovery functionality\n");
-	}
-
 	return 0;
 }
 
 int
 journal_scan_and_recover(void)
 {
-	cprintf ("Here?\n");
+	//cprintf ("------------------->Here?\n");
 	if (!super->jstart && !super->jend)
 		return 0;
 
@@ -1025,6 +1055,9 @@ journal_scan_and_recover(void)
 	int i = 0;
 	int r = 0;
 	bool skip_array[(NJBLKS *BLKSIZE)/sizeof (jrdwr_t)] = {0,};
+
+	//if (!super->jstart && !super->jend)
+		//return 0;
 
 	if (*start >= *end) {
 		len = (((NJBLKS *BLKSIZE) +JBSTART_ADDR) - *start);
@@ -1061,6 +1094,20 @@ journal_scan_and_recover(void)
 int
 journal_rec_remove (int *array, int len, jrdwr_t *jarray)
 {
+	struct File *remFile = journal_get_fp (&jarray[0]);
+
+	memset (remFile, 0x00, sizeof (struct File));
+
+	return 0;
+}
+int
+journal_rec_bitmapclear(int *array, int len, jrdwr_t *jarray)
+{
+	return 0;
+}
+int
+journal_rec_bitmapset(int *array, int len, jrdwr_t *jarray)
+{
 	return 0;
 }
 
@@ -1073,9 +1120,13 @@ journal_recover_file (int *array, int len, jrdwr_t *jarray)
 		switch (jarray[array[i]].jtype) {
 		case JREMOVE_FILE:
 			journal_rec_remove (array, len, jarray);
+			return 0;
 		case JBITMAP_SET:
+			journal_rec_bitmapset (array, len, jarray);
+			return 0;
 		case JBITMAP_CLEAR:
-			cprintf ("I'm yet to be implemented\n");
+			journal_rec_bitmapclear (array, len, jarray);
+			return 0;
 		default:
 			cprintf ("Don't know dude\n");
 		}

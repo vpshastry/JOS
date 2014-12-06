@@ -67,7 +67,6 @@ umain(int argc, char **argv)
 		panic("serve_read does not handle stale fileids correctly: %e", r);
 	cprintf("stale fileid is good\n");
 
-	r = open ("/crashfile", O_RDWR |O_CREAT);
 	// Try writing
 	if ((r = xopen("/new-file", O_RDWR|O_CREAT)) < 0)
 		panic("serve_open /new-file: %e", r);
@@ -126,15 +125,15 @@ umain(int argc, char **argv)
 	close(f);
 	cprintf("large file is good\n");
 
-	if (remove("/big") < 0)
-		panic ("Remove failed\n");
+	//if (remove("/new-file") < 0)
+		//panic ("Remove failed\n");
 
 
 	int rfd = -1;
 	int n = 0;
 
 	if ((rfd = open("/.journal", O_RDONLY)) < 0)
-		panic("open /newmotd: %e", rfd);
+		panic("open /.journal: %e", rfd);
 
 	cprintf("Printing journal\n");
 	while ((n = read(rfd, buf, sizeof buf-1)) > 0)

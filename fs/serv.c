@@ -282,7 +282,6 @@ serve_flush(envid_t envid, struct Fsreq_flush *req)
 	}
 
 	file_flush (openfile->o_file);
-
 	return 0;
 }
 
@@ -399,6 +398,9 @@ serve_write (envid_t envid, union Fsipc *ipc)
 		return r;
 	}
 
+	if ((r = journal_add (JSTART, (uintptr_t)openfile->o_file, 0)) < 0)
+		cprintf ("Adding entry to journel failed\n");
+
 	if (req->req_n > (PGSIZE - (sizeof (int) + sizeof (size_t))))
 		req->req_n = PGSIZE - (sizeof (int) + sizeof (size_t));
 
@@ -431,6 +433,9 @@ serve_trunc (envid_t envid, union Fsipc *ipc)
 		return r;
 	}
 
+	if ((r = journal_add (JSTART, (uintptr_t)openfile->o_file, 0)) < 0)
+		cprintf ("Adding entry to journel failed\n");
+
 	if (req->req_n % BLKSIZE) {
 		cprintf ("We currently don't support non aligned trunc");
 		return -1;
@@ -441,6 +446,9 @@ serve_trunc (envid_t envid, union Fsipc *ipc)
 		cprintf ("\n\n\n failed to trunc file @serve_trunc\n\n\n");
 		return r;
 	}
+
+	if ((r = journal_add (JDONE, (uintptr_t)openfile->o_file, 0)) < 0)
+		cprintf ("Adding entry to journel failed\n");
 
 	openfile->o_fd->fd_offset = 0;
 	openfile->o_file->f_size = 0;
