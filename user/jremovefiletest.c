@@ -1,0 +1,165 @@
+#include <inc/lib.h>
+
+const char *msg = "This is the NEW message of the day!\n\n";
+
+#define FVA ((struct Fd*)0xCCCCC000)
+
+static int
+xopen(const char *path, int mode)
+{
+	extern union Fsipc fsipcbuf;
+	envid_t fsenv;
+	
+	strcpy(fsipcbuf.open.req_path, path);
+	fsipcbuf.open.req_omode = mode;
+
+	fsenv = ipc_find_env(ENV_TYPE_FS);
+	ipc_send(fsenv, FSREQ_OPEN, &fsipcbuf, PTE_P | PTE_W | PTE_U);
+	return ipc_recv(NULL, FVA, NULL);
+}
+
+void
+umain(int argc, char **argv)
+{
+	int64_t r, f, i;
+	struct Fd *fd;
+	struct Fd fdcopy;
+	struct Stat st;
+	char buf[512];
+
+	// We open files manually first, to avoid the FD layer
+	if ((r = xopen("/not-found", O_RDONLY)) < 0 && r != -E_NOT_FOUND)
+		panic("serve_open /not-found: %e", r);
+	else if (r >= 0)
+		panic("serve_open /not-found succeeded!");
+
+	if ((r = xopen("/newmotd", O_RDONLY)) < 0)
+		panic("serve_open /newmotd: %e", r);
+	if (FVA->fd_dev_id != 'f' || FVA->fd_offset != 0 || FVA->fd_omode != O_RDONLY)
+		panic("serve_open did not fill struct Fd correctly\n");
+	cprintf("serve_open is good\n");
+
+	if ((r = devfile.dev_stat(FVA, &st)) < 0)
+		panic("file_stat: %e", r);
+	if (strlen(msg) != st.st_size)
+		panic("file_stat returned size %d wanted %d\n", st.st_size, strlen(msg));
+	cprintf("file_stat is good\n");
+
+	memset(buf, 0, sizeof buf);
+	if ((r = devfile.dev_read(FVA, buf, sizeof buf)) < 0)
+		panic("file_read: %e", r);
+	if (strcmp(buf, msg) != 0)
+		panic("file_read returned wrong data");
+	cprintf("file_read is good\n");
+
+	if ((r = devfile.dev_close(FVA)) < 0)
+		panic("file_close: %e", r);
+	cprintf("file_close is good\n");
+
+	// We're about to unmap the FD, but still need a way to get
+	// the stale filenum to serve_read, so we make a local copy.
+	// The file server won't think it's stale until we unmap the
+	// FD page.
+	fdcopy = *FVA;
+	sys_page_unmap(0, FVA);
+
+	//if ((r = devfile.dev_read(&fdcopy, buf, sizeof buf)) != -E_INVAL)
+		//panic("serve_read does not handle stale fileids correctly: %e", r);
+	cprintf("stale fileid is good\n");
+
+	// Try writing
+	if ((r = xopen("/new-file", O_RDWR|O_CREAT)) < 0)
+		panic("serve_open /new-file: %e", r);
+
+	if ((r = devfile.dev_write(FVA, msg, strlen(msg))) != strlen(msg))
+		panic("file_write: %e", r);
+	cprintf("file_write is good\n");
+
+	FVA->fd_offset = 0;
+	memset(buf, 0, sizeof buf);
+	if ((r = devfile.dev_read(FVA, buf, sizeof buf)) < 0)
+		panic("file_read after file_write: %e", r);
+	if (r != strlen(msg))
+		panic("file_read after file_write returned wrong length: %d", r);
+	if (strcmp(buf, msg) != 0)
+		panic("file_read after file_write returned wrong data");
+	cprintf("file_read after file_write is good\n");
+
+
+	if ((r = open ("/new-file", O_RDONLY)) >= 0)
+		cprintf ("/new-file currently present\n");
+
+	cprintf ("Trying to test the file removed restart after crash\n");
+	r = open ("/crashfile", O_RDWR |O_CREAT);
+	cprintf ("Crashing in between the remove file\n");
+	if (remove("/new-file") < 0)
+		panic ("Remove failed\n");
+
+
+	int rfd = -1;
+	int n = 0;
+
+	if ((rfd = open("/.journal", O_RDONLY)) < 0)
+		panic("open /.journal: %e", rfd);
+
+	cprintf("Printing journal\n");
+	while ((n = read(rfd, buf, sizeof buf-1)) > 0)
+		sys_cputs(buf, n);
+	cprintf("End of journal\n");
+
+	close (rfd);
+	return;
+}
+/*
+#include <inc/lib.h>
+
+void
+umain(int argc, char **argv)
+{
+	int rfd, wfd;
+	char buf[512];
+	int n, r;
+
+	if ((rfd = open("/newmotd", O_RDONLY)) < 0)
+		panic("open /newmotd: %e", rfd);
+	if ((wfd = open("/motd", O_RDWR)) < 0)
+		panic("open /motd: %e", wfd);
+	cprintf("file descriptors %d %d\n", rfd, wfd);
+	if (rfd == wfd)
+		panic("open /newmotd and /motd give same file descriptor");
+
+	cprintf("OLD MOTD\n===\n");
+	while ((n = read(wfd, buf, sizeof buf-1)) > 0)
+		sys_cputs(buf, n);
+	cprintf("===\n");
+	seek(wfd, 0);
+
+	if ((r = ftruncate(wfd, 0)) < 0)
+		panic("truncate /motd: %e", r);
+
+	cprintf("NEW MOTD\n===\n");
+	while ((n = read(rfd, buf, sizeof buf-1)) > 0) {
+		sys_cputs(buf, n);
+		if ((r = write(wfd, buf, n)) != n)
+			panic("write /motd: %e", r);
+	}
+	cprintf("===\n");
+
+	if (n < 0)
+		panic("read /newmotd: %e", n);
+
+	close(rfd);
+	close(wfd);
+
+	if ((rfd = open("/.journal", O_RDONLY)) < 0)
+		panic("open /newmotd: %e", rfd);
+
+	cprintf("Printing journal\n");
+	while ((n = read(rfd, buf, sizeof buf-1)) > 0)
+		sys_cputs(buf, n);
+	cprintf("End of journal\n");
+
+	close (rfd);
+	return;
+}
+*/
