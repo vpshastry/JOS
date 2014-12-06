@@ -384,6 +384,7 @@ file_set_size(struct File *f, off_t newsize)
 	}
 
 	f->f_size = newsize;
+	write_back (blockof (f));
 	return 0;
 }
 
@@ -434,9 +435,9 @@ fs_sync(void)
 	int i;
 
 	for (i =1; i <NBLOCKS; i++) {
-		if (!(bitmap[i/32] & (1<<(i%32)))) {
+		//if (!(bitmap[i/32] & (1<<(i%32)))) {
 			write_back (i);
-		}
+		//}
 	}
 }
 
@@ -471,6 +472,7 @@ file_remove(const char *path)
 		cprintf ("Adding journal failed\n");
 
 	memset (f, 0x00, sizeof (struct File));
+	write_back (blockof (f));
 
 	return 0;
 }
@@ -618,9 +620,12 @@ void
 bitmap_init (void)
 {
 	bitmap = (uint32_t *)(DISKMAP + (PGSIZE *2));
+	int i;
+	for (i =0; i <20; i++)
+		cprintf ("%d-32: %x\n", i *32,bitmap[i]);
+
 	return;
 	int nbitblocks;
-	int i;
 
 	nbitblocks = (NBLOCKS + BLKBITSIZE - 1) / BLKBITSIZE;
 
@@ -807,7 +812,7 @@ journal_init (void)
 	}
 
 	if (start != 0 || end != 0)
-		return E_NEEDS_SCANNING;
+		return -E_NEEDS_SCANNING;
 
 	cprintf ("Returning 0\n");
 	return 0;
@@ -974,10 +979,8 @@ journal_file_write(struct File *f, const void *buf, size_t count,
 	}
 
 	//cprintf ("jfile size: %d\n", jfile->f_size);
-	/*
 	   if ((r = file_set_size (f, MAX(offset + lcount, f->f_size))) < 0)
 		cprintf ("failed to set size\n");
-		*/
 	return lcount;
 }
 
@@ -1000,7 +1003,7 @@ journal_add (jtype_t jtype, uintptr_t farg, uint64_t sarg)
 		cprintf ("Failed to fill the buf\n");
 		return r;
 	}
-	//cprintf ("name: %s, buf: %s\n", ((struct File *)farg)->f_name, buf);
+	//cprintf ("name: %s, buf: %s, off: %d\n", ((struct File *)farg)->f_name, buf, *end);
 
 	r = journal_file_write (jfile, (void *)buf, r, *end);
 	if (r < 0) {
@@ -1026,6 +1029,7 @@ journal_add (jtype_t jtype, uintptr_t farg, uint64_t sarg)
 	} else {
 		write_back (blockof ((void *)jfile));
 		write_back (1); // We store start and end in superblock so sync
+		write_back (2);
 		for (i =0; i <NJBLKS; i++)
 			write_back (jfile->f_direct[i]);
 	}
