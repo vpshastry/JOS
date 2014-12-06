@@ -51,9 +51,9 @@ fs_init(void)
 		if (r != E_NEEDS_SCANNING)
 			cprintf ("Initializing journal failed\n");
 
+		cprintf ("Trying to recover the old state\n");
 		journal_scan_and_recover ();
 	}
-	//journal_checkand_repair ();
 }
 
 // Find the disk block number slot for the 'filebno'th block in file 'f'.
@@ -261,6 +261,10 @@ walk_path(const char *path, struct File **pdir, struct File **pf, char *lastelem
 int
 file_open(const char *path, struct File **pf)
 {
+	if (!strcmp (path, JFILE_PATH)) {
+		*pf = &super->journalFile;
+		return 0;
+	}
 	return walk_path(path, 0, pf, 0);
 }
 
@@ -427,8 +431,11 @@ fs_sync(void)
 {
 	int i;
 
-	for (i = 0; i < NBLOCKS; i++)
-		write_back (i);
+	for (i =1; i <NBLOCKS; i++) {
+		if (!(bitmap[i/32] & (1<<(i%32)))) {
+			write_back (i);
+		}
+	}
 }
 
 int
@@ -486,6 +493,7 @@ write_back (uint32_t blkno)
 	int r = 0;
 
 	if (page_is_dirty(addrstart)) {
+		cprintf ("#############before ide write##########\n");
 		r = ide_write (secstart, (void *)addrstart, 4);
 		if (r < 0) {
 			cprintf ("IDE write failed\n");
@@ -534,6 +542,7 @@ bitmap_clear_flag (uint32_t blockno, struct File *f)
 
 	if (crash_testing) {
 		crash_testing = 0;
+		fs_sync();
 		panic ("Crash testing\n");
 	}
 }
@@ -577,6 +586,22 @@ alloc_block (struct File *f)
 	return freeblock;
 }
 
+	void
+check_bitmap(void)
+{
+	uint32_t i;
+
+	// Make sure all bitmap blocks are marked in-use
+	for (i = 0; i * BLKBITSIZE < super->s_nblocks; i++)
+		assert(!is_block_free(2+i));
+
+	// Make sure the reserved and root blocks are marked in-use.
+	assert(!is_block_free(0));
+	assert(!is_block_free(1));
+
+	cprintf("bitmap is good\n");
+}
+
 void
 bitmap_init (void)
 {
@@ -586,13 +611,16 @@ bitmap_init (void)
 	nbitblocks = (NBLOCKS + BLKBITSIZE - 1) / BLKBITSIZE;
 
 	bitmap = (uint32_t *)(DISKMAP + (PGSIZE *2));
-	memset(bitmap, 0xFF, nbitblocks * BLKSIZE);
+
+	memset(bitmap, 0xFFFFFFFF, BLKSIZE);
 
 	// Clear the blocks 0, 1, and bitmap stored blocks
 	bitmap_clear_flag (0, NULL);
 	bitmap_clear_flag (1, NULL);
 	for (i = 0; i < nbitblocks; i++)
 		bitmap_clear_flag (2+i, NULL);
+
+	check_bitmap();
 }
 
 int
@@ -749,9 +777,6 @@ journal_init (void)
 	jfile = &super->journalFile;
 	crash_testing = 0;
 
-	if (handle_ocreate (JFILE_PATH, &jfile) < 0)
-		panic ("Failed to create journal file\n");
-
 	jfile->f_size = NJBLKS *BLKSIZE;
 	jfile->f_type = FTYPE_JOURN;
 	strcpy (jfile->f_name, JFILE_NAME);
@@ -764,6 +789,7 @@ journal_init (void)
 	if (start != 0 || end != 0)
 		return E_NEEDS_SCANNING;
 
+	cprintf ("Returning 0\n");
 	return 0;
 }
 
@@ -959,10 +985,14 @@ journal_add (jtype_t jtype, uintptr_t farg, uint64_t sarg)
 	if (*start >= *end && *start <= (*end +r))
 		*start = *end +r;
 
-	write_back (blockof ((void *)jfile));
-	write_back (1); // We store start and end in superblock so sync
-	for (i =0; i <NJBLKS; i++)
-		write_back (jfile->f_direct[i]);
+	if (jtype == JDONE) {
+		fs_sync ();
+	} else {
+		write_back (blockof ((void *)jfile));
+		write_back (1); // We store start and end in superblock so sync
+		for (i =0; i <NJBLKS; i++)
+			write_back (jfile->f_direct[i]);
+	}
 
 	//cprintf ("Crash: %d\n", crash_testing);
 	if (crash_testing) {
@@ -974,8 +1004,9 @@ journal_add (jtype_t jtype, uintptr_t farg, uint64_t sarg)
 }
 
 int
-journal_scan_and_recover()
+journal_scan_and_recover(void)
 {
+	cprintf ("Here?\n");
 	if (!super->jstart && !super->jend)
 		return 0;
 
@@ -1005,6 +1036,8 @@ journal_scan_and_recover()
 	int array[len];
 
 	for (i = 0; i < (len / sizeof (jrdwr_t)); i++) {
+		cprintf ("%d:%p\n", jarray[i].jtype,
+				journal_get_fp (&jarray[i]));
 		if (skip_array[i])
 			continue;
 
@@ -1020,6 +1053,12 @@ journal_scan_and_recover()
 }
 
 int
+journal_rec_remove (int *array, int len, jrdwr_t *jarray)
+{
+	return 0;
+}
+
+int
 journal_recover_file (int *array, int len, jrdwr_t *jarray)
 {
 	int i = 0;
@@ -1027,6 +1066,7 @@ journal_recover_file (int *array, int len, jrdwr_t *jarray)
 	for (i = 0; i < len; i++) {
 		switch (jarray[array[i]].jtype) {
 		case JREMOVE_FILE:
+			journal_rec_remove (array, len, jarray);
 		case JBITMAP_SET:
 		case JBITMAP_CLEAR:
 			cprintf ("I'm yet to be implemented\n");

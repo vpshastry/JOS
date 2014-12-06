@@ -66,9 +66,7 @@ mon_kerninfo(int argc, char **argv, struct Trapframe *tf)
 int
 mon_restartFS(int argc, char **argv, struct Trapframe *tf)
 {
-	cprintf ("Restarting FS\n");
 	ENV_CREATE(fs_fs, ENV_TYPE_FS);
-	cprintf ("Restarting FS done.\n");
 	ENV_CREATE(user_writemotd, ENV_TYPE_USER);
 	sched_yield();
 	return 0;

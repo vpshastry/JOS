@@ -183,7 +183,6 @@ serve_open(envid_t envid, struct Fsreq_open *req,
 	*pg_store = o->o_fd;
 	*perm_store = PTE_P|PTE_U|PTE_W|PTE_SHARE;
 
-	cprintf ("path: %s, crashfilepath: %s\n", path, CRASHFILEPATH);
 	if (! strcmp (path, CRASHFILEPATH)) {
 		cprintf ("Setting the crash bit\n");
 		crash_testing = 1;
@@ -323,6 +322,7 @@ fshandler handlers[] = {
 	[FSREQ_TRUNC] = 	serve_trunc,
 	[FSREQ_SYNC] = 		serve_sync,
 	[FSREQ_REMOVE] = 	serve_remove,
+
 };
 #define NHANDLERS (sizeof(handlers)/sizeof(handlers[0]))
 
@@ -446,3 +446,21 @@ serve_trunc (envid_t envid, union Fsipc *ipc)
 	openfile->o_file->f_size = 0;
 	return 0;
 }
+
+/*
+int
+serve_file_set_size(struct File *f, off_t newsize)
+{
+	int r;
+	if (newsize < f->f_size) {
+		r = handle_otrunc (f, newsize);
+		if (r < 0) {
+			cprintf ("truncation to lower size failed\n");
+			return -1;
+		}
+	}
+
+	f->f_size = newsize;
+	return 0;
+}
+*/
