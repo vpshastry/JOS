@@ -799,15 +799,16 @@ journal_get_buf (jtype_t jtype, uintptr_t farg, uint64_t sarg, char *buf)
 				j.args.jbitmap_clear.structFile);
 		return strlen (buf);
 
-	case JWRITE:
+	case JSTART:
 		j.jtype = jtype;
-		j.args.jwrite.structFile = (uintptr_t)farg;
+		j.jref = (++((struct File *)farg)->jref);
+		j.args.jstart.structFile = (uintptr_t)farg;
 
 		if (JOURNAL_ISBINARY)
 			goto jbinary;
 
 		snprintf (buf, MAXJBUFSIZE, "%d:%x\n", j.jtype,
-				j.args.jwrite.structFile);
+				j.args.jstart.structFile);
 
 		return strlen (buf);
 
@@ -825,6 +826,7 @@ journal_get_buf (jtype_t jtype, uintptr_t farg, uint64_t sarg, char *buf)
 
 	case JDONE:
 		j.jtype = jtype;
+		j.jref = (--((struct File *)farg)->jref);
 		j.args.jdone.structFile = (uintptr_t)farg;
 
 		if (JOURNAL_ISBINARY)
@@ -1047,10 +1049,10 @@ journal_check_matching_done (int idx, int *array, jrdwr_t *jarray, int end,
 		if (f != journal_get_fp(&jarray[i]))
 			continue;
 
-		if (jarray[i].jtype == JDONE)
+		if (jarray[i].jtype == JDONE && jarray[i].jref == 0)
 			return 0;
-		else
-			skip_array[i] = true, array[k++] = i;
+
+		skip_array[i] = true, array[k++] = i;
 	}
 	return -k;
 }
@@ -1059,8 +1061,8 @@ struct File *
 journal_get_fp (jrdwr_t *jentry)
 {
 	switch (jentry->jtype) {
-	case JWRITE:
-		return (struct File *) jentry->args.jwrite.structFile;
+	case JSTART:
+		return (struct File *) jentry->args.jstart.structFile;
 	case JREMOVE_FILE:
 		return (struct File *) jentry->args.jremove_file.structFile;
 	case JBITMAP_SET:

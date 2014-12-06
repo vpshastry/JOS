@@ -34,7 +34,7 @@ bool crash_testing;
 #define CRASHFILEPATH "/crashfile"
 
 typedef enum {
-	JWRITE,
+	JSTART,
 	JREMOVE_FILE,
 	JBITMAP_CLEAR,
 	JBITMAP_SET,
@@ -44,7 +44,7 @@ typedef enum {
 typedef union {
 	struct {
 		uintptr_t structFile;
-	} jwrite;
+	} jstart;
 	struct {
 		uintptr_t structFile;
 	} jremove_file;
@@ -63,8 +63,10 @@ typedef union {
 
 typedef struct {
 	jtype_t	jtype;
+	uint32_t jref;
 	jargs_t args;
-	char filltopowerof2[32 - (sizeof(jtype_t) +sizeof (jargs_t))];
+	char filltopowerof2[32 - (sizeof(jtype_t) +sizeof(uint32_t)
+				+sizeof (jargs_t))];
 } jrdwr_t;
 
 // <end> writeable FS declaration and journalling
