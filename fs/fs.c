@@ -1000,6 +1000,12 @@ journal_add (jtype_t jtype, uintptr_t farg, uint64_t sarg)
 		panic ("Testing the crash recovery functionality\n");
 	}
 
+	//cprintf ("Crash: %d\n", crash_testing);
+	if (crash_testing) {
+		crash_testing = 0;
+		panic ("Testing the crash recovery functionality\n");
+	}
+
 	return 0;
 }
 
