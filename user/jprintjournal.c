@@ -12,55 +12,10 @@ umain(int argc, char **argv)
 	char buf[512];
 	int rfd,n;
 
-/*	if ((f = open ("/motd", O_RDWR )) <0)
-		panic ("Failed to open");
 
-	cprintf ("Initial reading\n");
-	while ((r = read (f, buf, sizeof (buf) -1)) <0)
-	
-	cprintf("MSG %s\n",buf);
 
-	cprintf ("Rewriteing\n");
-	seek (f, 0);
-	if ((r = write(f, msg, strlen(msg))) <0)
-		panic ("write failed");
-	
-	seek (f, 0);*/
-	//while ((r = read (f, buf, sizeof (buf) -1)) <0)
-	
-	//cprintf("MSG %s\n",buf);
-	//close (f);
 
-	//if ((r = open ("/crashfile", O_CREAT)) <0)
-		//panic("Crash file failed to panic");
-/*
-	char name[20];
-	for (i =0; i <50; i++) {
-		snprintf (name, 20, "%d", i);
-		if ((f = open (name, O_CREAT |O_RDWR)) <0)
-			panic ("open failed");
 
-		if (i == 1);
-			//panic ("testing");
-		close (f);
-	}
-*/
-
-	f = open ("/myfile", O_CREAT);
-	r = write(f, msg, 10);
-	while ((n = read(f, buf, 10)) > 0)
-		sys_cputs(buf, n);
-	cprintf("%s\n",buf);
-	/*if ((f = open ("/myfile", O_RDWR)) <0) {
-		cprintf ("-----> Couldn't open myfile trying ocreate\n");
-		if ((f = open ("/myfile", O_CREAT|O_RDWR)) <0)
-			panic ("Open failed\n");
-	}*/
-
-	//if ((f = remove ("/myfile")) <0)
-		//panic ("Failed to remove\n");
-	//if ((f = remove ("/myfile")) <0)
-		//panic ("Failed to open");
 
 	if ((rfd = open("/.journal", O_RDONLY)) < 0)
 		panic("open /journal: %e", rfd);

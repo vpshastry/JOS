@@ -398,7 +398,7 @@ serve_write (envid_t envid, union Fsipc *ipc)
 		return r;
 	}
 
-	if ((r = journal_add (JSTART, (uintptr_t)openfile->o_file, 0)) < 0)
+	if ((r = journal_add (JSTART, (uintptr_t)openfile->o_file, 0, 0)) < 0)
 		cprintf ("Adding entry to journel failed\n");
 
 	if (req->req_n > (PGSIZE - (sizeof (int) + sizeof (size_t))))
@@ -433,7 +433,7 @@ serve_trunc (envid_t envid, union Fsipc *ipc)
 		return r;
 	}
 
-	if ((r = journal_add (JSTART, (uintptr_t)openfile->o_file, 0)) < 0)
+	if ((r = journal_add (JSTART, (uintptr_t)openfile->o_file, 0, 0)) < 0)
 		cprintf ("Adding entry to journel failed\n");
 
 	if (req->req_n % BLKSIZE) {
@@ -447,7 +447,7 @@ serve_trunc (envid_t envid, union Fsipc *ipc)
 		return r;
 	}
 
-	if ((r = journal_add (JDONE, (uintptr_t)openfile->o_file, 0)) < 0)
+	if ((r = journal_add (JDONE, (uintptr_t)openfile->o_file, 0, 0)) < 0)
 		cprintf ("Adding entry to journel failed\n");
 
 	openfile->o_fd->fd_offset = 0;

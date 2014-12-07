@@ -41,6 +41,7 @@ typedef enum {
 	JBITMAP_CLEAR,
 	JBITMAP_SET,
 	JSETSIZE,
+	JWRITE,
 	JCOMMIT,
 	JASSIGN,
 	JDONE,
@@ -60,6 +61,11 @@ typedef union {
 		uint64_t blockno;
 		uintptr_t structFile;
 	} jbitmap_clear;
+	struct {
+		uint64_t  len;
+		uint64_t  offset;
+		uintptr_t structFile;
+	} jwrite;
 	struct {
 		uint64_t blockno;
 		uintptr_t structFile;
@@ -95,9 +101,11 @@ int	ide_write(uint32_t secno, const void *src, size_t nsecs);
 
 /* bc.c */
 void*	diskaddr(uint64_t blockno);
+bool 	block_is_free(uint32_t blockno);
 bool	va_is_mapped(void *va);
 bool	va_is_dirty(void *va);
 void	flush_block(void *addr);
+int	check_fn(struct File *f);
 void	bc_init(void);
 
 /* fs.c */
@@ -138,8 +146,8 @@ dirent_create (struct File *dir, const char *name, uint32_t filetype,
 int write_back (uint32_t blkno);
 
 /* Journal functions */
-int journal_add (jtype_t jtype, uintptr_t farg, uint64_t sarg);
-int journal_get_buf (jtype_t jtype, uintptr_t farg, uint64_t sarg, char *buf, int *ref);
+int journal_add (jtype_t jtype, uintptr_t farg, uint64_t sarg, uint64_t targ);
+int journal_get_buf (jtype_t jtype, uintptr_t farg, uint64_t sarg, uint64_t targ, char *buf, int *ref);
 int journal_init (void);
 int journal_scan_and_recover (void);
 int journal_file_write(struct File *f, const void *buf, size_t count,
