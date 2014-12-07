@@ -19,36 +19,15 @@ void
 umain(int argc, char **argv)
 {
 
-	int64_t r, f, i;
-	int rfd,n;
-	struct Fd *fd;
-	struct Fd fdcopy;
-	struct Stat st;
+	int rfd;
 	char buf[512];
+	int n, r;
 
-	if ((rfd = open("/.journal", O_RDONLY)) < 0)
-		panic("open /newmotd: %e", rfd);
+	cprintf ("\n\nTrying to open the removed file\n");
+	cprintf ("It fails as the transaction 'new-file' remove is recovered after restart\n");
+	if ((rfd = open("/new-file", O_RDONLY)) < 0)
+		panic("open /new-file: %e", rfd);
+	cprintf ("Present: hehe\n");
+	close(rfd);
 
-	cprintf("Printing journal\n");
-	while ((n = read(rfd, buf, sizeof buf-1)) > 0)
-		sys_cputs(buf, n);
-	cprintf("End of journal\n");
-
-	close (rfd);
-
-/*
-	// We open files manually first, to avoid the FD layer
-	if ((r = xopen("/newmotd", O_RDONLY)) < 0)
-		panic("serve_open /newmotd: %e", r);
-	if (FVA->fd_dev_id != 'f' || FVA->fd_offset != 0 || FVA->fd_omode != O_RDONLY)
-		panic("serve_open did not fill struct Fd correctly\n");
-	cprintf("serve_open is good\n");
-
-
-	memset(buf, 0, sizeof buf);
-	if ((r = devfile.dev_read(FVA, buf, sizeof buf)) < 0)
-		panic("file_read: %e", r);
-	cprintf("MSG: %s", buf);
-	cprintf("file_read is good\n");
-*/
 }

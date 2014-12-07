@@ -96,7 +96,7 @@ umain(int argc, char **argv)
 	fd = (struct Fd*) (0xD0000000 + r*PGSIZE);
 	if (fd->fd_dev_id != 'f' || fd->fd_offset != 0 || fd->fd_omode != O_RDONLY)
 		panic("open did not fill struct Fd correctly\n");
-	cprintf("open is good\n");
+	cprintf("\n\n\nopen is good\n\n\n");
 
 	// Try files with indirect blocks
 	if ((f = open("/big", O_WRONLY|O_CREAT)) < 0)
@@ -109,6 +109,8 @@ umain(int argc, char **argv)
 	}
 	close(f);
 
+
+	cprintf("\nWriting Big File to Disk...\n");
 	if ((f = open("/big", O_RDONLY)) < 0)
 		panic("open /big: %e", f);
 	for (i = 0; i < (NDIRECT*3)*BLKSIZE; i += sizeof(buf)) {
@@ -124,6 +126,8 @@ umain(int argc, char **argv)
 	}
 	close(f);
 	cprintf("large file is good\n");
+	cprintf("\n'new-file' created in file system using Open and data successfully written\n");
+	cprintf("'big' file created in file system using Open and data successfully written\n");
 	
 }
 

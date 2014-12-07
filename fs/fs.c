@@ -27,7 +27,7 @@ check_super(void)
 
 // Initialize the file system
 void
-fs_init(void)
+fs_init()
 {
 	cprintf ("Starting FS\n");
 	static_assert(sizeof(struct File) == 256);
@@ -53,10 +53,10 @@ fs_init(void)
 		if (r != -E_NEEDS_SCANNING)
 			cprintf ("Initializing journal failed\n");
 
-		cprintf ("Trying to recover the old state\n");
-/*		if ((r = journal_scan_and_recover ()) < 0) {
-			cprintf ("Failed to recover\n");
-		}*/
+//		cprintf ("Trying to recover the old state\n");
+//			if ((r = journal_scan_and_recover()) < 0) {
+//				cprintf ("Failed to recover\n");
+//			}
 	}
 }
 
@@ -176,7 +176,7 @@ dir_lookup(struct File *dir, const char *name, struct File **file)
 		if ((r = file_get_block(dir, i, &blk)) < 0)
 			return r;
 		f = (struct File*) blk;
-		cprintf("All Files present under super in the File System:");
+		cprintf("All Below Files are present under super in the File System:\n");
 		for (j = 0; j < BLKFILES; j++){
 			cprintf("%s\n",f[j].f_name);
 			if (strcmp(f[j].f_name, name) == 0) {
@@ -309,7 +309,6 @@ int
 file_write(struct File *f, const void *buf, size_t count, off_t offset)
 {
 
-//if(check_fn(f)){
 
 
 	char *blk;
@@ -365,95 +364,8 @@ file_write(struct File *f, const void *buf, size_t count, off_t offset)
 
 	//cprintf ("returning\n");
 	return lcount;
-/*}
-	else {
-	int r, bn;
-	off_t pos;
-	char *blk;
-
-	// Extend file if necessary
-	if (offset + count > f->f_size)
-		if ((r = file_set_size(f, offset + count)) < 0)
-			return r;
-
-	for (pos = offset; pos < offset + count; ) {
-		if ((r = file_get_block(f, pos / BLKSIZE, &blk)) < 0)
-			return r;
-		bn = MIN(BLKSIZE - pos % BLKSIZE, offset + count - pos);
-		memmove(blk + pos % BLKSIZE, buf, bn);
-		pos += bn;
-		buf += bn;
-	}
-
-	return count;
-	}*/
 }
-/*
 
-int
-file_write(struct File *f, const void *buf, size_t count, off_t offset)
-{
-	int r, bn,i;
-	off_t pos;
-	char *blk;
-	size_t min,lcount=0;
-	uint32_t blockno = offset / BLKSIZE;
-	if (f->f_size == MAXFILESIZE) {
-		cprintf ("File reached its max size\n");
-		return -1;
-	}
-
-	if (offset > f->f_size)
-		offset = f->f_size;
-
-if(offset==111){
-	for (pos = offset; pos < offset + count; ) {
-		r = file_get_block (f, pos/BLKSIZE, &blk);
-		bn = MIN(BLKSIZE - pos % BLKSIZE, offset + count - pos);
-		memmove(blk + pos % BLKSIZE, buf, bn);
-		pos += bn;
-		buf += bn;
-	}
-}
-else{
-
-	min = MIN (count, PGSIZE - (offset%BLKSIZE));
-	memcpy (blk+ (offset % BLKSIZE), buf, min);
-	lcount += min;
-	write_back (blockof (blk));
-			cprintf ("blockof: %d, bitmap: %x\n", blockof(blk),
-				 bitmap[blockof(blk)/32] & (1<<(blockof (blk))));
-	for (i = 1; lcount < count; i++) {
-		r = file_get_block (f, blockno + i, &blk);
-		if (r < 0) {
-			cprintf ("get block failed: %e\n", r);
-			break;
-		}
-
-		min = MIN (count, PGSIZE);
-		memcpy (blk, buf + lcount, min);
-		lcount += min;
-	}
-
-
-}
-	if ((r = journal_add(JWRITE, (uintptr_t)f, (uint64_t)offset, (uint64_t)count)) < 0)
-		cprintf ("Failed to journal the write\n");
-
-	if ((r = file_set_size (f, count)) < 0)
-		cprintf ("failed to set size\n");
-
-	if (journal_add (JDONE, (uintptr_t)f, 0, 0) < 0)
-		cprintf ("Adding journal failed\n");
-
-if(offset==0){
-	return count;
-}
-else
-{
-return lcount;
-}
-}*/
 int
 file_set_size(struct File *f, off_t newsize)
 {
@@ -573,28 +485,11 @@ file_remove(const char *path)
 		cprintf ("Adding journal failed\n");
 
 	memset (f, 0x00, sizeof (struct File));
-	write_back (blockof (f));
-
+//	write_back (blockof (f));
+	fs_sync();
 	return 0;
 }
 
-int check_fn(struct File *f){
-	if(
-	(strcmp(f->f_name,"bin")) ||
-	(strcmp(f->f_name,"sbin")) ||
-	(strcmp(f->f_name,"newmotd")) ||
-	(strcmp(f->f_name,"motd")) ||
-	(strcmp(f->f_name,"robig")) ||
-	(strcmp(f->f_name,"lorem")) ||
-	(strcmp(f->f_name,"script")) ||
-	(strcmp(f->f_name,"testshell.key")) ||
-	(strcmp(f->f_name,"testshell.sh")) ||
-	(strcmp(f->f_name,"new-file"))){
-	return 1;
-	}
-	return 0;
-}
-// While implementing writeable FS - team defined prototypes
 bool
 page_is_present (void *addr)
 {
@@ -654,7 +549,6 @@ bitmap_set_free (uint32_t blockno, struct File *f)
 		cprintf ("Failed to add to journal\n");
 }
 
-// Clears the bit
 void
 bitmap_clear_flag (uint32_t blockno, struct File *f)
 {
@@ -686,7 +580,6 @@ is_block_free (uint32_t blockno)
 	if (bitmap[blockno / 32] & (1 << (blockno % 32)))
 		return 1;
 	return 0;
-	//return (bitmap[blockno/32] & (1<<(blockno%32)));
 }
 
 uint32_t
@@ -737,12 +630,9 @@ alloc_block (struct File *f)
 check_bitmap(void)
 {
 	uint32_t i;
-
-	// Make sure all bitmap blocks are marked in-use
 	for (i = 0; i * BLKBITSIZE < super->s_nblocks; i++)
 		assert(!is_block_free(2+i));
 
-	// Make sure the reserved and root blocks are marked in-use.
 	assert(!is_block_free(0));
 	assert(!is_block_free(1));
 
@@ -1222,37 +1112,64 @@ journal_add (jtype_t jtype, uintptr_t farg, uint64_t sarg, uint64_t targ)
 	return 0;
 }
 
+
+
+
+
+
 int
-journal_scan_and_recover(void)
+journal_scan_and_recover()
 {
-	//cprintf ("------------------->Here?\n");
+
+//char *journal_arr = get_journal();
+
+
+
+
+
+
+/*
+
+
+
+	cprintf ("------------------->CH1\n");
 	if (!super->jstart && !super->jend)
 		return 0;
 
-	uint64_t *start = &super->jstart;
-	uint64_t *end = &super->jend;
+	cprintf ("------------------->CH2\n");
+	const char *start = (char *)&super->jstart;
+	const char *end = (char *)&super->jend;
+	struct jBuf *curBuf;
 	// Is a copy of the journal file (separate buf to access it continuously
-	char bufcopy[NJBLKS *PGSIZE];
-	jrdwr_t *jarray = (jrdwr_t *) bufcopy;
+	//jrdwr_t *jarray = (jrdwr_t *) super->bufcopy;
 	int len = 0;
 	int i = 0;
 	int r = 0;
-	bool skip_array[(NJBLKS *BLKSIZE)/sizeof (jrdwr_t)] = {0,};
+	//bool skip_array[(NJBLKS *BLKSIZE)/sizeof (jrdwr_t)] = {0,};
 
+	//cprintf ("------------------->CH3\n");
 	//if (!super->jstart && !super->jend)
-		//return 0;
+	//	return 0;
 
-	if (*start >= *end) {
-		len = (((NJBLKS *BLKSIZE) +JBSTART_ADDR) - *start);
-		memcpy (bufcopy, start, len);
-		memcpy ((void *)(bufcopy +len),
-				(void *)((uint64_t)JBSTART_ADDR), *end);
-		len += *end;
-	} else {
-		len = *end;
-		memcpy (bufcopy, start, *end - *start);
-	}
+//	if (*start >= *end) {
+//		len = (((NJBLKS *BLKSIZE) +JBSTART_ADDR) - *start);
+//		memcpy (bufcopy, start, len);
+//		memcpy ((void *)(bufcopy +len),
+//				(void *)((uint64_t)JBSTART_ADDR), *end);
+//		len += *end;
+//	} else {
+	//	len = *end;
+		
+	cprintf ("------------------->CH3\n");
+		len = (uint64_t)super->jend;
 
+	cprintf ("------------------->CH4\n");
+		//memcpy (curBuf->bufcopy, start, (uint64_t)super->jend - (uint64_t)super->jstart);
+	strncpy (curBuf->bufcopy, (const char *)&super->jstart, 50);
+//	}
+
+	cprintf ("------------------->CH5\n");
+	cprintf ("\n\nCURRENT BUFFER : %s\n\n",curBuf->bufcopy);
 	// Used to store the index of the entry that are related to file
 	// that needs recovery
 	int array[len];
@@ -1271,6 +1188,7 @@ journal_scan_and_recover(void)
 			journal_recover_file (array, -r, jarray);
 	}
 	//panic ("not yet implemetned");
+	cprintf ("------------------->CH5\n");*/
 	return 0;
 }
 

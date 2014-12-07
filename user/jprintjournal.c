@@ -23,12 +23,11 @@ umain(int argc, char **argv)
 	cprintf("Printing journal\n");
 	while ((n = read(rfd, buf, sizeof buf-1)) > 0)
 		sys_cputs(buf, n);
-	cprintf("End of journal\n");
-
+	cprintf("\n\nEnd of journal\n\n");
+	
 	close (rfd);
 
-
-	cprintf ("Initial reading\n");
+	
 
 	
 	return;

@@ -88,6 +88,9 @@ typedef struct {
 				+sizeof (jargs_t))];
 } jrdwr_t;
 
+struct jBuf{	
+	char bufcopy[8192];
+};
 // <end> writeable FS declaration and journalling
 
 struct Super *super;		// superblock

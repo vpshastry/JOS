@@ -89,9 +89,9 @@ umain(int argc, char **argv)
 	if ((r = open ("/new-file", O_RDONLY)) >= 0)
 		cprintf ("/new-file currently present\n");
 
-	cprintf ("Trying to test the file removed restart after crash\n");
+	/*cprintf ("Trying to test the file removed restart after crash\n");
 	r = open ("/crashfile", O_RDWR |O_CREAT);
-	cprintf ("Crashing in between the remove file\n");
+	cprintf ("Crashing in between the remove file\n");*/
 	if (remove("/new-file") < 0)
 		panic ("Remove failed\n");
 
