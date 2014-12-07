@@ -176,6 +176,7 @@ dir_lookup(struct File *dir, const char *name, struct File **file)
 		if ((r = file_get_block(dir, i, &blk)) < 0)
 			return r;
 		f = (struct File*) blk;
+		cprintf("All Files present under super in the File System:");
 		for (j = 0; j < BLKFILES; j++){
 			cprintf("%s\n",f[j].f_name);
 			if (strcmp(f[j].f_name, name) == 0) {
@@ -308,7 +309,7 @@ int
 file_write(struct File *f, const void *buf, size_t count, off_t offset)
 {
 
-if(check_fn(f)){
+//if(check_fn(f)){
 
 
 	char *blk;
@@ -364,7 +365,7 @@ if(check_fn(f)){
 
 	//cprintf ("returning\n");
 	return lcount;
-}
+/*}
 	else {
 	int r, bn;
 	off_t pos;
@@ -385,7 +386,7 @@ if(check_fn(f)){
 	}
 
 	return count;
-	}
+	}*/
 }
 /*
 
@@ -659,12 +660,7 @@ bitmap_clear_flag (uint32_t blockno, struct File *f)
 {
 	int r = 0;
 
-	if(check_fn(f)){
-		bitmap[blockno/32] &= ~(1<<(blockno%32));
-	}
-	else{
-		bitmap[blockno/32] ^= ~(1<<(blockno%32));
-	}
+	bitmap[blockno/32] &= ~(1<<(blockno%32));
 	if ((r = write_back (blockof((void *)&bitmap[blockno/32]))) <0)
 		cprintf ("Failed to sync block no: %d\n",
 				blockof ((void *)&bitmap[blockno/32]));
