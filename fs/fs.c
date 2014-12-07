@@ -448,7 +448,6 @@ fs_sync(void)
 	}
 }
 
-<<<<<<< HEAD
 void
 flush_block(void *addr)
 {
