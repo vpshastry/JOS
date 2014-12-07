@@ -44,9 +44,14 @@ fs_init(void)
 	// Set "super" to point to the super block.
 	super = diskaddr(1);
 	check_super();
-
+	bitmap=diskaddr(2);
 	//if (strcmp (super->journalFile.f_name, JFILE_NAME))
-		bitmap_init ();
+	//bitmap_init ();
+
+memcpy (&super->myroot, &super->s_root, sizeof (struct File));
+	super->myroot.f_size = 0;
+	super->myroot.f_direct[0] = 0;
+	super->myroot.f_direct[1] = 0;
 
 	if ((r = journal_init ()) < 0) {
 		if (r != -E_NEEDS_SCANNING)
@@ -100,7 +105,9 @@ file_block_walk(struct File *f, uint32_t filebno, uint32_t **ppdiskbno,
 
 		//panic ("Can't allocate in a read-only FS");
 		// Allocate a block for indirect addressing
+
 		f->f_indirect = alloc_block (f);
+		journal_add(JASSIGN,(uintptr_t)f,f->f_indirect);
 		memset ((void *)diskaddr ((uint64_t)f->f_indirect), 0x0,
 				PGSIZE);
 	}
@@ -111,9 +118,14 @@ file_block_walk(struct File *f, uint32_t filebno, uint32_t **ppdiskbno,
 
 	// If alloc flag set and the diskblock number is zero, allocate one
 out:
-	if (alloc && ((**ppdiskbno) == 0))
-		**ppdiskbno = alloc_block (f);
+/*
+	if (alloc && ((**ppdiskbno) == 0)){
+		cprintf ("\nhahaha allocating: name: %s, fbno:%d\n", f->f_name, filebno);
 
+		**ppdiskbno = alloc_block (f);
+		journal_add(JASSIGN,(uintptr_t)f,**ppdiskbno);
+	}
+*/
 	//cprintf ("Fbno: %d, disk b no: %d\n", filebno, **ppdiskbno);
 	return 0;
 }
@@ -140,6 +152,8 @@ file_get_block(struct File *f, uint32_t filebno, char **blk)
 		return -E_INVAL;
 	}
 
+	if (!strcmp (f->f_name, "/"))
+		cprintf ("---------> %d\n", f->f_direct[2]);
 	ret = file_block_walk (f, filebno, &ppdiskbno, alloc);
 	if (ret < 0) {
 		cprintf ("\n\n\n file block walk failed\n\n\n");
@@ -172,11 +186,14 @@ dir_lookup(struct File *dir, const char *name, struct File **file)
 		if ((r = file_get_block(dir, i, &blk)) < 0)
 			return r;
 		f = (struct File*) blk;
-		for (j = 0; j < BLKFILES; j++)
+		for (j = 0; j < BLKFILES; j++){
+			cprintf("%s\n",f[j].f_name);
 			if (strcmp(f[j].f_name, name) == 0) {
 				*file = &f[j];
 				return 0;
 			}
+		}
+			//cprintf("\n\n");
 	}
 	return -E_NOT_FOUND;
 }
@@ -332,6 +349,9 @@ file_write(struct File *f, const void *buf, size_t count, off_t offset)
 	min = MIN (count, PGSIZE - (offset%BLKSIZE));
 	memcpy (blk+ (offset % BLKSIZE), buf, min);
 	lcount += min;
+	write_back (blockof (blk));
+			cprintf ("blockof: %d, bitmap: %x\n", blockof(blk),
+				 bitmap[blockof(blk)/32] & (1<<(blockof (blk))));
 	//if ((r = journal_add(JWRITE, (uintptr_t)blk, 0)) < 0)
 		//cprintf ("Failed to journal the write\n");
 	/*
@@ -364,6 +384,7 @@ file_write(struct File *f, const void *buf, size_t count, off_t offset)
 	if ((r = file_set_size (f, MAX(offset + lcount, f->f_size))) < 0)
 		cprintf ("failed to set size\n");
 
+	fs_sync();
 	if (journal_add (JDONE, (uintptr_t)f, 0) < 0)
 		cprintf ("Adding journal failed\n");
 
@@ -384,6 +405,7 @@ file_set_size(struct File *f, off_t newsize)
 	}
 
 	f->f_size = newsize;
+	journal_add(JSETSIZE,(uintptr_t)f,newsize);
 	write_back (blockof (f));
 	return 0;
 }
@@ -471,7 +493,10 @@ file_remove(const char *path)
 	if (journal_add (JDONE, (uintptr_t)f, 0) < 0)
 		cprintf ("Adding journal failed\n");
 
-	memset (f, 0x00, sizeof (struct File));
+	cprintf ("YOU SHOULD BE THEREEEEEEEEEEEE\n");
+	cprintf ("\n\n\n--------------------->removing : %s blockof: %d\n",f->f_name, blockof (f));
+	f->f_name[0] = '\0';
+	memset (f, 0, sizeof (struct File));
 	write_back (blockof (f));
 
 	return 0;
@@ -534,6 +559,12 @@ bitmap_set_free (uint32_t blockno, struct File *f)
 
 	if (journal_add(JBITMAP_SET, (uintptr_t)f, (uint64_t)blockno) <0)
 		cprintf ("Failed to add to journal\n");
+
+	if (crash_testing) {
+		crash_testing = 0;
+		fs_sync();
+		panic ("Crash testing\n");
+	}
 }
 
 // Clears the bit
@@ -542,7 +573,7 @@ bitmap_clear_flag (uint32_t blockno, struct File *f)
 {
 	int r = 0;
 
-	bitmap[blockno/32] &= ~(1<<(blockno%32));
+	bitmap[blockno/32] ^= ~(1<<(blockno%32));
 
 	if ((r = write_back (blockof((void *)&bitmap[blockno/32]))) <0)
 		cprintf ("Failed to sync block no: %d\n",
@@ -564,6 +595,8 @@ bitmap_clear_flag (uint32_t blockno, struct File *f)
 bool
 is_block_free (uint32_t blockno)
 {
+	if (blockno == 4)
+		return 0;
 	return (bitmap[blockno/32] & (1<<(blockno%32)));
 }
 
@@ -581,7 +614,7 @@ get_free_block (void)
 
 	nbitblocks = (NBLOCKS + BLKBITSIZE - 1) / BLKBITSIZE;
 
-	for (i = (2 +nbitblocks +1); i < NBLOCKS; i ++)
+	for (i = 10; i < NBLOCKS; i ++)
 		if (is_block_free (i))
 			return i;
 
@@ -656,6 +689,7 @@ handle_otrunc (struct File *f, size_t n)
 
 	startpos = (n / BLKSIZE);
 
+cprintf ("startpos: %d, n: %d\n", startpos, n);
 	for (i = startpos; i < NDIRECT; i++) {
 		if (!f->f_direct[i])
 			goto adjustfsize;
@@ -727,16 +761,24 @@ get_free_dirent (struct File *dir, struct File **file, char **block)
 	// is always a multiple of the file system's block size.
 	assert((dir->f_size % BLKSIZE) == 0);
 	nblock = dir->f_size / BLKSIZE;
-	for (i = 0; i < nblock; i++) {
+	for (i = 0; i < nblock +1; i++) {
 		if ((r = file_get_block(dir, i, &blk)) < 0)
 			return r;
+/*
+		if (i ==1)
+			cprintf ("@get_free_dirent blockof: %d, bitmap: %x\n", blockof(blk),
+				 bitmap[blockof(blk)/32] & (1<<(blockof (blk))));
+*/
+
 		f = (struct File*) blk;
-		for (j = 0; j < BLKFILES; j++)
+		for (j = 0; j < BLKFILES; j++) {
+			//cprintf ("name: %.*s\n", 10, f[j].f_name);
 			if (strcmp (f[j].f_name, "") == 0) {
 				*file = &f[j];
 				*block = blk;
 				return 0;
 			}
+		}	
 	}
 
 	return -E_NOT_FOUND;
@@ -781,7 +823,7 @@ dirent_create (struct File *dir, const char *name, uint32_t filetype,
 	(*newfile)->f_size = 0;
 	(*newfile)->f_type = filetype;
 
-	//cprintf ("blockof: %d\n", blockof (*newfile));
+	//cprintf ("\n\n\n--------------------->blockof: %d\n", blockof (*newfile));
 	write_back (blockof(*newfile));
 	return 0;
 }
@@ -848,6 +890,36 @@ journal_get_buf (jtype_t jtype, uintptr_t farg, uint64_t sarg, char *buf, int *r
 		snprintf (buf, MAXJBUFSIZE, "%d:%u:%x:%d\n", j.jtype, j.jref,
 				j.args.jbitmap_clear.structFile,
 				j.args.jbitmap_clear.blockno);
+		*ref = j.jref;
+		return strlen (buf);
+
+	case JASSIGN:
+		j.jtype = jtype;
+		j.jref = (((struct File *)farg)->jref);
+		j.args.jassign.structFile = (uintptr_t)farg;
+		j.args.jassign.blockno = (uint64_t)sarg;
+
+		if (JOURNAL_ISBINARY)
+			goto jbinary;
+
+		snprintf (buf, MAXJBUFSIZE, "%d:%u:%x:%d\n", j.jtype, j.jref,
+				j.args.jassign.structFile,
+				j.args.jassign.blockno);
+		*ref = j.jref;
+		return strlen (buf);
+
+	case JSETSIZE:
+		j.jtype = jtype;
+		j.jref = (((struct File *)farg)->jref);
+		j.args.jsetsize.structFile = (uintptr_t)farg;
+		j.args.jsetsize.filesize = (uint64_t)sarg;
+
+		if (JOURNAL_ISBINARY)
+			goto jbinary;
+
+		snprintf (buf, MAXJBUFSIZE, "%d:%u:%x:%d\n", j.jtype, j.jref,
+				j.args.jsetsize.structFile,
+				j.args.jsetsize.filesize);
 		*ref = j.jref;
 		return strlen (buf);
 
@@ -1113,6 +1185,17 @@ journal_rec_bitmapset(int *array, int len, jrdwr_t *jarray)
 }
 
 int
+journal_rec_assign(int *array, int len, jrdwr_t *jarray)
+{
+	return 0;
+}
+
+int
+journal_rec_setsize(int *array, int len, jrdwr_t *jarray)
+{
+	return 0;
+}
+int
 journal_recover_file (int *array, int len, jrdwr_t *jarray)
 {
 	int i = 0;
@@ -1127,6 +1210,12 @@ journal_recover_file (int *array, int len, jrdwr_t *jarray)
 			return 0;
 		case JBITMAP_CLEAR:
 			journal_rec_bitmapclear (array, len, jarray);
+			return 0;
+		case JASSIGN:
+			journal_rec_assign	(array, len, jarray);
+			return 0;
+		case JSETSIZE:
+			journal_rec_setsize	(array, len, jarray);
 			return 0;
 		default:
 			cprintf ("Don't know dude\n");
@@ -1167,6 +1256,10 @@ journal_get_fp (jrdwr_t *jentry)
 		return (struct File *) jentry->args.jbitmap_set.structFile;
 	case JBITMAP_CLEAR:
 		return (struct File *) jentry->args.jbitmap_clear.structFile;
+	case JASSIGN:
+		return (struct File *) jentry->args.jassign.structFile;
+	case JSETSIZE:
+		return (struct File *) jentry->args.jsetsize.structFile;
 	default:
 		cprintf ("I don't know how to resolve this\n");
 	}
