@@ -332,8 +332,6 @@ file_write(struct File *f, const void *buf, size_t count, off_t offset)
 	min = MIN (count, PGSIZE - (offset%BLKSIZE));
 	memcpy (blk+ (offset % BLKSIZE), buf, min);
 	lcount += min;
-	//if ((r = journal_add(JWRITE, (uintptr_t)blk, 0)) < 0)
-		//cprintf ("Failed to journal the write\n");
 	/*
 	if (lcount < count) {
 		r = file_get_block (f, blockno+1, &blk);
@@ -361,10 +359,13 @@ file_write(struct File *f, const void *buf, size_t count, off_t offset)
 			//cprintf ("Failed to journal the write\n");
 	}
 
+	if ((r = journal_add(JWRITE, (uintptr_t)f, (uint64_t)offset, (uint64_t)count)) < 0)
+		cprintf ("Failed to journal the write\n");
+
 	if ((r = file_set_size (f, MAX(offset + lcount, f->f_size))) < 0)
 		cprintf ("failed to set size\n");
 
-	if (journal_add (JDONE, (uintptr_t)f, 0) < 0)
+	if (journal_add (JDONE, (uintptr_t)f, 0, 0) < 0)
 		cprintf ("Adding journal failed\n");
 
 	//cprintf ("returning\n");
@@ -456,10 +457,10 @@ file_remove(const char *path)
 	if (f->f_type == FTYPE_DIR || f->f_type == FTYPE_JOURN)
 		return E_BAD_PATH;
 
-	if ((r = journal_add (JSTART, (uintptr_t)f, 0)) < 0)
+	if ((r = journal_add (JSTART, (uintptr_t)f, 0, 0)) < 0)
 		cprintf ("Adding entry to journel failed\n");
 
-	if ((r = journal_add (JREMOVE_FILE, (uintptr_t)f, 0)) < 0)
+	if ((r = journal_add (JREMOVE_FILE, (uintptr_t)f, 0, 0)) < 0)
 		cprintf ("Adding entry to journel failed\n");
 
 	r = handle_otrunc (f, 0);
@@ -468,7 +469,7 @@ file_remove(const char *path)
 		return r;
 	}
 
-	if (journal_add (JDONE, (uintptr_t)f, 0) < 0)
+	if (journal_add (JDONE, (uintptr_t)f, 0, 0) < 0)
 		cprintf ("Adding journal failed\n");
 
 	memset (f, 0x00, sizeof (struct File));
@@ -532,7 +533,7 @@ bitmap_set_free (uint32_t blockno, struct File *f)
 	if (!f || f->f_type == FTYPE_JOURN)
 		return;
 
-	if (journal_add(JBITMAP_SET, (uintptr_t)f, (uint64_t)blockno) <0)
+	if (journal_add(JBITMAP_SET, (uintptr_t)f, (uint64_t)blockno, 0) <0)
 		cprintf ("Failed to add to journal\n");
 }
 
@@ -551,7 +552,7 @@ bitmap_clear_flag (uint32_t blockno, struct File *f)
 	if (!f || f->f_type == FTYPE_JOURN)
 		return;
 
-	if (journal_add(JBITMAP_CLEAR, (uintptr_t)f, (uint64_t)blockno) <0)
+	if (journal_add(JBITMAP_CLEAR, (uintptr_t)f, (uint64_t)blockno, 0) <0)
 		cprintf ("Failed to add to journal\n");
 
 	if (crash_testing) {
@@ -620,12 +621,10 @@ void
 bitmap_init (void)
 {
 	bitmap = (uint32_t *)(DISKMAP + (PGSIZE *2));
-	int i;
-	for (i =0; i <20; i++)
-		cprintf ("%d-32: %x\n", i *32,bitmap[i]);
 
 	return;
 	int nbitblocks;
+	int i;
 
 	nbitblocks = (NBLOCKS + BLKBITSIZE - 1) / BLKBITSIZE;
 
@@ -800,8 +799,6 @@ journal_init (void)
 	jfile = &super->journalFile;
 	crash_testing = 0;
 
-	if (!strcmp (super->journalFile.f_name, JFILE_NAME))
-		cprintf ("$@##@$T&@#$*&#$&T*&#*&^#@$*&^#Persists\n");
 	jfile->f_size = NJBLKS *BLKSIZE;
 	jfile->f_type = FTYPE_JOURN;
 	strcpy (jfile->f_name, JFILE_NAME);
@@ -819,7 +816,8 @@ journal_init (void)
 }
 
 int
-journal_get_buf (jtype_t jtype, uintptr_t farg, uint64_t sarg, char *buf, int *ref)
+journal_get_buf (jtype_t jtype, uintptr_t farg, uint64_t sarg, uint64_t targ,
+		char *buf, int *ref)
 {
 	jrdwr_t j;
 
@@ -851,6 +849,23 @@ journal_get_buf (jtype_t jtype, uintptr_t farg, uint64_t sarg, char *buf, int *r
 		snprintf (buf, MAXJBUFSIZE, "%d:%u:%x:%d\n", j.jtype, j.jref,
 				j.args.jbitmap_clear.structFile,
 				j.args.jbitmap_clear.blockno);
+		*ref = j.jref;
+		return strlen (buf);
+
+	case JWRITE:
+		j.jtype = jtype;
+		j.jref = (((struct File *)farg)->jref);
+		j.args.jwrite.structFile = (uintptr_t)farg;
+		j.args.jwrite.offset = (uint64_t)sarg;
+		j.args.jwrite.len = (uintptr_t)targ;
+
+		if (JOURNAL_ISBINARY)
+			goto jbinary;
+
+		snprintf (buf, MAXJBUFSIZE, "%d:%u:%u:%u:%x\n", j.jtype, j.jref,
+				j.args.jwrite.len,
+				(char *)j.args.jwrite.offset,
+				j.args.jbitmap_clear.structFile);
 		*ref = j.jref;
 		return strlen (buf);
 
@@ -985,7 +1000,7 @@ journal_file_write(struct File *f, const void *buf, size_t count,
 }
 
 int
-journal_add (jtype_t jtype, uintptr_t farg, uint64_t sarg)
+journal_add (jtype_t jtype, uintptr_t farg, uint64_t sarg, uint64_t targ)
 {
 	//return 0;
 	int r = 0;
@@ -999,7 +1014,7 @@ journal_add (jtype_t jtype, uintptr_t farg, uint64_t sarg)
 		return 0;
 
 	//cprintf ("before get buf\n");
-	if ((r = journal_get_buf (jtype, farg, sarg, buf, &ref)) < 0) {
+	if ((r = journal_get_buf (jtype, farg, sarg, targ, buf, &ref)) < 0) {
 		cprintf ("Failed to fill the buf\n");
 		return r;
 	}

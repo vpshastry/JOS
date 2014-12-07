@@ -41,6 +41,7 @@ typedef enum {
 	JBITMAP_CLEAR,
 	JBITMAP_SET,
 	JFILE_SETSIZE,
+	JWRITE,
 	JCOMMIT,
 	JDONE,
 } jtype_t;
@@ -59,6 +60,11 @@ typedef union {
 		uint64_t blockno;
 		uintptr_t structFile;
 	} jbitmap_clear;
+	struct {
+		uint64_t  len;
+		uint64_t  offset;
+		uintptr_t structFile;
+	} jwrite;
 	struct {
 		uint64_t blockno;
 		uintptr_t structFile;
@@ -129,8 +135,8 @@ dirent_create (struct File *dir, const char *name, uint32_t filetype,
 int write_back (uint32_t blkno);
 
 /* Journal functions */
-int journal_add (jtype_t jtype, uintptr_t farg, uint64_t sarg);
-int journal_get_buf (jtype_t jtype, uintptr_t farg, uint64_t sarg, char *buf, int *ref);
+int journal_add (jtype_t jtype, uintptr_t farg, uint64_t sarg, uint64_t targ);
+int journal_get_buf (jtype_t jtype, uintptr_t farg, uint64_t sarg, uint64_t targ, char *buf, int *ref);
 int journal_init (void);
 int journal_scan_and_recover (void);
 int journal_file_write(struct File *f, const void *buf, size_t count,
