@@ -40,9 +40,10 @@ typedef enum {
 	JREMOVE_FILE,
 	JBITMAP_CLEAR,
 	JBITMAP_SET,
-	JFILE_SETSIZE,
+	JSETSIZE,
 	JWRITE,
 	JCOMMIT,
+	JASSIGN,
 	JDONE,
 } jtype_t;
 
@@ -69,6 +70,14 @@ typedef union {
 		uint64_t blockno;
 		uintptr_t structFile;
 	} jbitmap_set;
+	struct {
+		uint64_t blockno;
+		uintptr_t structFile;
+	} jassign;
+	struct {
+		uint64_t filesize;
+		uintptr_t structFile;
+	} jsetsize;
 } jargs_t;
 
 typedef struct {

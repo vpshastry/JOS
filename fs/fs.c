@@ -103,6 +103,7 @@ file_block_walk(struct File *f, uint32_t filebno, uint32_t **ppdiskbno,
 		f->f_indirect = alloc_block (f);
 		memset ((void *)diskaddr ((uint64_t)f->f_indirect), 0x0,
 				PGSIZE);
+		journal_add(JASSIGN,(uintptr_t)f,f->f_indirect, 0);
 	}
 
 	ib_addr = (uint32_t *) diskaddr ((uint64_t)f->f_indirect);
@@ -111,8 +112,10 @@ file_block_walk(struct File *f, uint32_t filebno, uint32_t **ppdiskbno,
 
 	// If alloc flag set and the diskblock number is zero, allocate one
 out:
-	if (alloc && ((**ppdiskbno) == 0))
+	if (alloc && ((**ppdiskbno) == 0)) {
 		**ppdiskbno = alloc_block (f);
+		journal_add(JASSIGN,(uintptr_t)f,**ppdiskbno, 0);
+	}
 
 	//cprintf ("Fbno: %d, disk b no: %d\n", filebno, **ppdiskbno);
 	return 0;
@@ -385,6 +388,7 @@ file_set_size(struct File *f, off_t newsize)
 	}
 
 	f->f_size = newsize;
+	journal_add(JSETSIZE,(uintptr_t)f,newsize, 0);
 	write_back (blockof (f));
 	return 0;
 }
@@ -862,10 +866,10 @@ journal_get_buf (jtype_t jtype, uintptr_t farg, uint64_t sarg, uint64_t targ,
 		if (JOURNAL_ISBINARY)
 			goto jbinary;
 
-		snprintf (buf, MAXJBUFSIZE, "%d:%u:%u:%u:%x\n", j.jtype, j.jref,
+		snprintf (buf, MAXJBUFSIZE, "%d:%u:%x:%u:%u\n", j.jtype, j.jref,
+				j.args.jbitmap_clear.structFile,
 				j.args.jwrite.len,
-				(char *)j.args.jwrite.offset,
-				j.args.jbitmap_clear.structFile);
+				j.args.jwrite.offset);
 		*ref = j.jref;
 		return strlen (buf);
 
@@ -910,6 +914,37 @@ journal_get_buf (jtype_t jtype, uintptr_t farg, uint64_t sarg, uint64_t targ,
 
 		*ref = j.jref;
 		return strlen (buf);
+
+	case JASSIGN:
+               j.jtype = jtype;
+               j.jref = (((struct File *)farg)->jref);
+               j.args.jassign.structFile = (uintptr_t)farg;
+               j.args.jassign.blockno = (uint64_t)sarg;
+
+               if (JOURNAL_ISBINARY)
+                       goto jbinary;
+
+               snprintf (buf, MAXJBUFSIZE, "%d:%u:%x:%d\n", j.jtype, j.jref,
+	                            j.args.jassign.structFile,
+	                            j.args.jassign.blockno);
+       		*ref = j.jref;
+	       return strlen (buf);
+
+       case JSETSIZE:
+               j.jtype = jtype;
+	       j.jref = (((struct File *)farg)->jref);
+	       j.args.jsetsize.structFile = (uintptr_t)farg;
+	       j.args.jsetsize.filesize = (uint64_t)sarg;
+
+               if (JOURNAL_ISBINARY)
+                       goto jbinary;
+
+               snprintf (buf, MAXJBUFSIZE, "%d:%u:%x:%d\n", j.jtype, j.jref,
+	                               j.args.jsetsize.structFile,
+	                               j.args.jsetsize.filesize);
+       		*ref = j.jref;
+	       return strlen (buf);
+
 
 	default:
 		cprintf ("Dude, You're in wrong place\n");
@@ -1131,6 +1166,18 @@ journal_rec_bitmapset(int *array, int len, jrdwr_t *jarray)
 }
 
 int
+journal_rec_assign(int *array, int len, jrdwr_t *jarray)
+{
+       return 0;
+}
+
+int
+journal_rec_setsize(int *array, int len, jrdwr_t *jarray)
+{
+       return 0;
+}
+int
+
 journal_recover_file (int *array, int len, jrdwr_t *jarray)
 {
 	int i = 0;
@@ -1146,6 +1193,13 @@ journal_recover_file (int *array, int len, jrdwr_t *jarray)
 		case JBITMAP_CLEAR:
 			journal_rec_bitmapclear (array, len, jarray);
 			return 0;
+		case JASSIGN:
+                       journal_rec_assign      (array, len, jarray);
+                       return 0;
+                case JSETSIZE:
+                       journal_rec_setsize     (array, len, jarray);
+                       return 0;
+
 		default:
 			cprintf ("Don't know dude\n");
 		}
@@ -1185,6 +1239,12 @@ journal_get_fp (jrdwr_t *jentry)
 		return (struct File *) jentry->args.jbitmap_set.structFile;
 	case JBITMAP_CLEAR:
 		return (struct File *) jentry->args.jbitmap_clear.structFile;
+	case JWRITE:
+		return (struct File *) jentry->args.jwrite.structFile;
+	case JASSIGN:
+	        return (struct File *) jentry->args.jassign.structFile;
+	case JSETSIZE:
+	        return (struct File *) jentry->args.jsetsize.structFile;
 	default:
 		cprintf ("I don't know how to resolve this\n");
 	}
