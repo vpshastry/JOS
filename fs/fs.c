@@ -340,7 +340,19 @@ file_write(struct File *f, const void *buf, size_t count, off_t offset)
 	min = MIN (count, PGSIZE - (offset%BLKSIZE));
 	memcpy (blk+ (offset % BLKSIZE), buf, min);
 	lcount += min;
-	
+	/*
+	if (lcount < count) {
+		r = file_get_block (f, blockno+1, &blk);
+		if (r < 0) {
+			cprintf ("\nfile get block failed: %e\n", r);
+			return r;
+		}
+
+		min = MIN (count-lcount, PGSIZE);
+		memcpy (blk, buf + lcount, min);
+		lcount += min;
+		f->f_size += lcount;
+	}*/
 	for (i = 1; lcount < count; i++) {
 		r = file_get_block (f, blockno + i, &blk);
 		if (r < 0) {
@@ -436,6 +448,7 @@ fs_sync(void)
 	}
 }
 
+<<<<<<< HEAD
 void
 flush_block(void *addr)
 {
